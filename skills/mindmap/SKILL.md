@@ -34,8 +34,8 @@ Decide the mode:
 
 ## 2. Agree on the modules with the user
 
-Propose the module list, one line each. Prefer what the product does (Patient,
-Appointments, Billing) over how the code is split; add technical subsystems
+Propose the module list, one line each. Prefer what the product does (Projects,
+About, Contact) over how the code is split; add technical subsystems
 (data model, integrations, auth) only where they matter on their own. Ask the user
 to correct the list and to add goals and constraints that are not visible in the code.
 Wait for the answer before writing.
@@ -54,23 +54,23 @@ Wait for the answer before writing.
 Example:
 
 ```markdown
-## [2] Patient → mindmap/patient.md
-- Has consultations with a doctor [3]; the result goes into the patient record
-- Books appointments: picks a free slot, gets a confirmation, can cancel
-- Opens the patient record: history, lab results, prescriptions
+## [2] Projects → mindmap/projects.md
+- Shows the work as a grid of project cards, filterable by category
+- Each project has a case-study page: problem, process, result, images
+- The home page features the 3 latest projects, each linking to Contact [4]
 ```
 
 ## 4. Write one `mindmap/<module>.md` per module
 
-File names are lowercase kebab-case (`patient.md`, `lab-results.md`). Start from this
+File names are lowercase kebab-case (`projects.md`, `case-studies.md`). Start from this
 shape, with one `##` section per part of the module:
 
 ```markdown
-# Patient — details
+# Projects — details
 
 Summary in MIND_MAP: [2]
 
-## Appointments
+## Project grid
 - What it does:
 - Rules:
 - Data:

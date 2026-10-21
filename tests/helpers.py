@@ -67,7 +67,7 @@ class TempDirCase(unittest.TestCase):
         return result.stdout
 
     def init_project(self) -> None:
-        result = self.run_tasks("init", "--name", "Clinic", session=None)
+        result = self.run_tasks("init", "--name", "Portfolio", session=None)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def start_session(self, session_id: str = SESSION, source: str = "startup", **env: str) -> str:

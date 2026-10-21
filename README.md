@@ -15,7 +15,7 @@ A Claude Code plugin for task-gated, multi-agent work on a codebase:
 The `tasks` CLI (`.claude/bin/tasks` in a project): `new`, `work`, `status`, `list`,
 `pause`, `stop`, `done`.
 
-The design is in [SPEC.md](SPEC.md) (Romanian).
+The design, its decisions and the milestone plan are in [SPEC.md](SPEC.md).
 
 ## Requirements
 

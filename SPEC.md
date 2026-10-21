@@ -1,370 +1,374 @@
-# cplugin: specificație
+# cplugin: specification
 
-> Ciornă v0.1, 2026-10-21. `cplugin` e numele de lucru; numele final schimbă și comenzile (`/cplugin:...`) și folderul de stare (`.cplugin/`).
-> Pornește de la plugin-ul playbook 1.4.7. Secțiunea 12 spune ce preluăm și ce schimbăm.
+> Draft v0.1, 2026-10-21. `cplugin` is the working name; the final name also changes the commands (`/cplugin:...`) and the state folder (`.cplugin/`).
+> It starts from the playbook plugin 1.4.7. Section 12 lists what we keep and what we change.
 
-## 1. Scop
+## 1. Purpose
 
-Un plugin pentru Claude Code care:
+A Claude Code plugin that:
 
-1. ține **memoria proiectului** în două niveluri: ideile mari în `MIND_MAP.md` și detaliile, pe module, în fișiere mici;
-2. face orice modificare de cod printr-un **task** (`task.md`), parcurs în etape care se bifează pe rând;
-3. împarte munca între agenți cu **roluri stricte**: MAIN coordonează, worker scrie cod, tester scrie teste, iar judges evaluează;
-4. pune **judges de la alți furnizori** (Codex, Antigravity) să verifice ce a scris Claude;
-5. arată live, într-un **tablou ASCII**, ce agent lucrează și la ce;
-6. impune regulile prin **hook-uri** care blochează abaterile, nu doar avertizează.
+1. keeps the **project memory** on two levels: the big ideas in `MIND_MAP.md`, and the details, per module, in small files;
+2. makes every code change go through a **task** (`task.md`), worked through gates that are checked one at a time;
+3. splits the work between agents with **strict roles**: MAIN coordinates, the worker writes code, the tester writes tests, and judges review;
+4. has **judges from other providers** (Codex, Antigravity) check what Claude wrote;
+5. shows live, on an **ASCII board**, which agent is working and on what;
+6. enforces the rules through **hooks** that block deviations instead of only warning about them.
 
-## 2. Memoria proiectului
+## 2. Project memory
 
-### 2.1 Două niveluri
+### 2.1 Two levels
 
-| Fișier | Conține | Când se citește |
+| File | Holds | When it is read |
 |---|---|---|
-| `MIND_MAP.md` | Ideile mari: un nod numerotat pe modul, 3–6 rânduri fiecare, și link spre detalii | Automat, la începutul fiecărei sesiuni (hook-ul SessionStart) |
-| `mindmap/<modul>.md` | Ce face fiecare secțiune a modulului: reguli, date, cazuri limită, unde e codul, unde sunt testele, decizii luate | La cerere, când un task atinge modulul. E prima etapă din Design |
+| `MIND_MAP.md` | The big ideas: one numbered node per module, 3–6 lines each, linking its detail file | Automatically, at the start of every session (the SessionStart hook) |
+| `mindmap/<module>.md` | What each part of the module does: rules, data, edge cases, where the code and tests are, decisions taken | On demand, when a task touches the module. It is the first Design gate |
 
-`MIND_MAP.md` trebuie să rămână sub **8.500 de caractere**, pentru că intră în context la fiecare pornire, iar Claude Code taie la 10.000 de caractere textul injectat de un hook. Dacă îl depășește, hook-ul încarcă doar începutul și îi cere lui Claude să citească restul și să-ți spună că harta trebuie comprimată. Ce e mai detaliat se mută în `mindmap/`.
+`MIND_MAP.md` must stay under **8,500 characters**: it goes into context at every start, and Claude Code cuts the text a hook injects at 10,000 characters. If the map is longer, the hook loads only the beginning and asks Claude to read the rest and to tell the user the map needs compressing. Anything more detailed moves into `mindmap/`.
 
-### 2.2 Exemplu
+### 2.2 Example
 
 `MIND_MAP.md`:
 
 ```markdown
-# MIND_MAP — Clinica
+# MIND_MAP — Portfolio
 
-## [1] Prezentare
-Aplicație pentru gestiunea unei clinici. Module: [2] Pacient, [3] Medic, [4] Facturare.
+## [1] Overview
+Presentation site for a designer: shows their work, says who they are and how to reach them. Modules: [2] Projects, [3] About, [4] Contact.
 
-## [2] Pacient → mindmap/pacient.md
-- Face consultații: cu un medic [3], rezultatul intră în dosar
-- Face programări: alege un slot liber, primește confirmare, poate anula
-- Accesează dosarul pacientului: istoric, analize, rețete
+## [2] Projects → mindmap/projects.md
+- Shows the work as a grid of project cards, filterable by category
+- Each project has a case-study page: problem, process, result, images
+- The home page features the 3 latest projects, each linking to Contact [4]
 ```
 
-`mindmap/pacient.md`:
+`mindmap/projects.md`:
 
 ```markdown
-# Pacient — detalii
-Rezumat: MIND_MAP [2]
+# Projects — details
 
-## Consultații
-- Ce face: ...
-- Reguli: ...
-- Cod: src/pacient/consultatii.py
-- Teste: tests/pacient/test_consultatii.py
-- Decizii: (task 012) consultația nu se poate șterge, doar anula
+Summary in MIND_MAP: [2]
 
-## Programări
+## Project grid
+- What it does: ...
+- Rules: ...
+- Code: src/projects/grid.tsx
+- Tests: tests/projects/grid.test.ts
+- Decisions: (task 012) filtering happens in the page, without a reload
+
+## Project page
 ...
 
-## Dosarul pacientului
+## Featured projects
 ...
 ```
 
-### 2.3 Reguli
+### 2.3 Rules
 
-- Fiecare nod din `MIND_MAP.md` care are detalii indică fișierul lor (`→ mindmap/<modul>.md`).
-- Un fișier de detalii are câte o secțiune `##` pentru fiecare parte a modulului. Dacă depășește ~400 de rânduri, se împarte în `mindmap/<modul>/<secțiune>.md`.
-- La finalul fiecărui task, **fișierul de detalii se actualizează pe loc**, în secțiunea care se ocupă de partea respectivă. `MIND_MAP.md` se modifică doar dacă s-au schimbat ideile mari. Nu se adaugă câte un nod nou pentru fiecare task (lecție preluată din playbook).
-- `/cplugin:mindmap` generează prima versiune din codul existent. Pe un proiect nou, o completăm împreună din discuție.
+- Every `MIND_MAP.md` node that has details points to their file (`→ mindmap/<module>.md`).
+- A detail file has one `##` section per part of the module. Past ~400 lines it is split into `mindmap/<module>/<section>.md`.
+- At the end of every task, **the detail file is updated in place**, in the section that owns the changed part. `MIND_MAP.md` changes only when the big ideas change. Tasks never add one node each (a lesson taken from playbook).
+- `/cplugin:mindmap` builds the first version from the existing code. On a new project, the user and Claude fill it in together from conversation.
 
-## 3. Task-ul
+## 3. The task
 
-### 3.1 Unde stă și cum se creează
+### 3.1 Where it lives and how it is created
 
-- `.cplugin/tasks/<NNN>-<tip>-<nume>/task.md`, plus subfolderul `judges/` pentru rapoartele judges.
-- Se creează **doar** cu `tasks new <tip> <nume> --modul <modul>`. Hook-ul blochează crearea manuală.
-- Tipuri: `feature`, `bugfix`, `refactor`, `explore`, `test`, `docs`.
-- `tasks work <N>` activează task-ul, `tasks done` îl închide și refuză dacă mai sunt etape nebifate. `tasks stop` îl dezactivează fără să-l închidă. `tasks list` și `tasks status` arată starea.
-- `tasks pause "<motiv>"` îi permite lui MAIN să-și încheie tura cu etape deschise, când are nevoie de tine.
-- Starea stă pe disc, nu în conversație. De aceea task-ul supraviețuiește compactării contextului și poate fi reluat în altă sesiune.
+- `.cplugin/tasks/<NNN>-<type>-<name>/task.md`, plus a `judges/` folder for the judges' reports.
+- It is created **only** with `tasks new <type> <name> --module <module> --request -` (the user's request, verbatim, on stdin). The hook blocks creating it by hand.
+- Types: `feature`, `bugfix`, `refactor`, `explore`, `test`, `docs`.
+- `tasks work <N>` activates the task; `tasks done` closes it and refuses while gates are open. `tasks stop` deactivates it without closing it. `tasks list` and `tasks status` show where things stand.
+- `tasks pause "<reason>"` lets MAIN end its turn with open gates when it needs the user.
+- The state lives on disk, not in the conversation. That is why a task survives context compaction and can be resumed in another session.
 
-### 3.2 Etapele
+### 3.2 The stages
 
-| # | Etapă | Cine | Ce se întâmplă |
+| # | Stage | Who | What happens |
 |---|---|---|---|
-| 1 | **Design** | MAIN | Citește detaliile modulului. Spune cu vorbele lui ce i s-a cerut, cum arată „gata” (criterii verificabile), ce intră și ce nu intră în task |
-| 2 | **Plan Review** | judges, apoi MAIN | Judges evaluează planul fără să vadă conversația și fără să poată modifica ceva. MAIN acceptă, amână sau respinge fiecare observație, cu motiv |
-| 3 | **Work Plan** | MAIN, tester, worker | Pentru fiecare pas: teste → teste roșii → implementare → teste verzi (secțiunea 4.3) |
-| 4 | **Implementation Review** | judges, apoi MAIN | Judges evaluează codul (diff-ul task-ului). MAIN triază observațiile la fel ca la etapa 2 |
-| 5 | **Review final** | MAIN | Testele trec, nu au rămas urme de debug, iar `mindmap/<modul>.md` (și `MIND_MAP.md`, dacă e cazul) e actualizat |
+| 1 | **Design** | MAIN | Reads the module's details. States in its own words what was asked, what "done" looks like (verifiable criteria), and what is in and out of scope |
+| 2 | **Plan Review** | judges, then MAIN | Judges review the plan without seeing the conversation and without being able to change anything. MAIN accepts, parks or rejects each finding, with a reason |
+| 3 | **Work Plan** | MAIN, tester, worker | For each step: tests → Red → implementation → Green (section 4.3) |
+| 4 | **Implementation Review** | judges, then MAIN | Judges review the code (the task's diff). MAIN triages the findings as in stage 2 |
+| 5 | **Final Review** | MAIN | Tests pass, no debug leftovers remain, and `mindmap/<module>.md` (plus `MIND_MAP.md` when needed) is updated |
 
-### 3.3 Șablonul `task.md`
+### 3.3 The `task.md` template
 
 ```markdown
-# 007 — feature — programari-pacient
+# 007 — feature — project-filter
 
 ## Status
-activ
+active
 
-## Cerința
-(textul tău, copiat exact de `tasks new`)
+## Request
+(the user's text, copied verbatim by `tasks new`)
 
 ## Context
-- MIND_MAP: [2] Pacient
-- Detalii: mindmap/pacient.md → Programări
+- MIND_MAP [2] Projects → `mindmap/projects.md`
 
 ## 1. Design
-- [ ] Am citit secțiunile afectate din mindmap/pacient.md: ...
-- [ ] Cererea, cu vorbele mele: ...
-- [ ] „Gata” înseamnă (criterii verificabile): ...
-- [ ] Intră în task: ...
-- [ ] Nu intră în task: ...
+- [ ] Read the affected sections of the detail files listed in Context: ...
+- [ ] The request in my own words: ...
+- [ ] Done means (verifiable criteria): ...
+- [ ] In scope: ...
+- [ ] Out of scope: ...
+- [ ] Wrote the Work Plan: one group per step, each with criteria, interface and how it is verified
 
 ## 2. Plan Review
-- [ ] `tasks plan-review 7`
-- [ ] Triere: fiecare observație → acceptat / amânat / respins + motiv
+- [ ] Run `.claude/bin/tasks plan-review 7` and wait for it to finish
+- [ ] Triage: every finding → accepted / parked / rejected, with the reason
 
 ## 3. Work Plan
-(câte un grup pe pas, completat la Design)
-### Pas 1: <ce se implementează>
-Criterii: ...
-Interfață: ...
-Verificare: teste            (sau: manual — <verificare concretă>)
-- [ ] Teste (tester): ...
-- [ ] Roșu: testele pică din motivul corect (comanda + câte pică)
-- [ ] Implementare (worker): ...
-- [ ] Verde: comanda + câte trec
-- [ ] Checkpoint: ce n-am anticipat? Planul mai e bun?
+### Step 1: <what gets built>
+Criteria: ...
+Interface: ...
+Verify: tests            (or: manual — <the concrete check>)
+- [ ] Tests (tester): ...
+- [ ] Red: the tests fail for the right reason (command + failing count)
+- [ ] Implementation (worker): ...
+- [ ] Green: command + passing count
+- [ ] Checkpoint: what did I not expect? Is the plan still right?
 
 ## 4. Implementation Review
-- [ ] `tasks impl-review 7`
-- [ ] Triere: fiecare observație → acceptat / amânat / respins + motiv
+- [ ] Run `.claude/bin/tasks impl-review 7` and wait for it to finish
+- [ ] Triage: every finding → accepted / parked / rejected, with the reason
 
-## 5. Review final
-- [ ] Toate testele trec (comanda + numărul de teste)
-- [ ] Fără urme de debug
-- [ ] mindmap/pacient.md actualizat pe loc; MIND_MAP.md doar dacă s-au schimbat ideile mari
+## 5. Final Review
+- [ ] All tests pass (command + count)
+- [ ] No debug leftovers
+- [ ] Updated the owning sections of the detail files in place; MIND_MAP.md only if the big ideas changed
 
-## Amânate
-(ce a apărut pe parcurs și nu intră aici, cu destul context pentru un task viitor)
+## Parked
+(what came up and is out of scope, with enough context for a future task)
 ```
 
-Regula de bifare: o etapă bifată primește pe același rând un rezultat scurt. Textul original nu se înlocuiește. Planul se poate modifica pe parcurs, dar doar prin etape nebifate.
+The checking rule: a checked gate gets a short outcome on the same line, and the original text is never replaced. The plan may change along the way, but only through unchecked gates.
 
-## 4. Agenții
+## 4. The agents
 
-### 4.1 Roluri
+### 4.1 Roles
 
-| Rol | Ce e | Model (implicit) | Scrie în | Nu are voie |
+| Role | What it is | Model (default) | Writes to | May not |
 |---|---|---|---|---|
-| **MAIN** | Sesiunea principală, cea cu care vorbești | ce rulezi tu | `task.md` (task-ul activ), `MIND_MAP.md`, `mindmap/**` | să scrie cod sau teste: deleagă |
-| **worker** | Sub-agent Claude (`agents/worker.md`) | `opus` | fișierele de cod din `roles.worker.paths` | să scrie teste, să bifeze etape, să pornească alți agenți, să ruleze `tasks` |
-| **tester** | Sub-agent Claude (`agents/tester.md`) | `sonnet` | fișierele de test din `roles.tester.paths` | să scrie cod, să bifeze etape, să pornească alți agenți, să ruleze `tasks` |
-| **judge** | CLI extern: `codex`, `agy` | modelul implicit al CLI-ului | nimic: rulează în sandbox read-only | orice modificare |
+| **MAIN** | The main session, the one the user talks to | whatever the user runs | the active `task.md`, `MIND_MAP.md`, `mindmap/**` | write code or tests: it delegates |
+| **worker** | Claude sub-agent (`agents/worker.md`) | `opus` | code files under `roles.worker.paths` | write tests, check gates, start other agents, run `tasks` |
+| **tester** | Claude sub-agent (`agents/tester.md`) | `sonnet` | test files under `roles.tester.paths` | write code, check gates, start other agents, run `tasks` |
+| **judge** | External CLI: `codex`, `agy` | the CLI's default model | nothing: runs in a read-only sandbox | change anything |
 
-- Sub-agenții **nu văd conversația**: primesc doar ce le dă MAIN în prompt (pasul, criteriile, fișierele relevante), plus `CLAUDE.md`.
-- worker și tester nu au tool-ul `Agent` (`disallowedTools` în frontmatter), deci nu pot porni alți agenți.
-- Doar MAIN bifează etapele. worker și tester întorc un raport, iar MAIN îl rezumă în `task.md`.
-- Fișierele care nu sunt cod (`.md`, `.json`, `.yaml`, imagini) nu sunt restricționate pe roluri. „Cod” se definește ca în playbook: după extensie, plus `bin/`, `scripts/` și fișierele care încep cu shebang. Lista e configurabilă.
+- Sub-agents **do not see the conversation**: they get only what MAIN puts in their prompt (the step, the criteria, the relevant files), plus `CLAUDE.md`.
+- The worker and the tester do not have the `Agent` tool (`disallowedTools` in their frontmatter), so they cannot start other agents.
+- Only MAIN checks gates. The worker and the tester return a report, and MAIN summarizes it in `task.md`.
+- Files that are not code (`.md`, `.json`, `.yaml`, images) are not restricted by role. "Code" is defined as in playbook: by extension, plus `bin/`, `scripts/` and files that start with a shebang. The list is configurable.
 
-### 4.2 Cum se impun rolurile
+### 4.2 How the roles are enforced
 
-Hook-ul PreToolUse primește `agent_type` când apelul vine dintr-un sub-agent. Dacă lipsește, apelul e al lui MAIN. Pentru fiecare Edit/Write/NotebookEdit:
+The PreToolUse hook receives `agent_type` when the call comes from a sub-agent; when it is missing, the call is MAIN's. For every Edit/Write/NotebookEdit it:
 
-1. află rolul din `agent_type` (`cplugin:worker`, `cplugin:tester`, sau lipsă = MAIN);
-2. compară calea fișierului cu căile permise rolului în `config.toml`;
-3. dacă nu e permisă, oprește apelul cu `permissionDecision: "deny"` și un mesaj care spune cui îi aparține fișierul.
+1. finds the role from `agent_type` (`cplugin:worker`, `cplugin:tester`, or missing = MAIN);
+2. compares the file's path with the paths the role may write in `config.toml`;
+3. if the path is not allowed, stops the call with `permissionDecision: "deny"` and a message saying which role owns the file.
 
-Bash nu poate fi controlat pe căi înainte de execuție (`echo > x.py` trece). De aceea, după fiecare Bash, PostToolUse compară `git status` cu instantaneul anterior. Dacă rolul a modificat fișiere care nu-i aparțin, agentul primește imediat un mesaj, iar abaterea se notează în `task.md`, la secțiunea „Abateri”. Asta presupune ca proiectul să fie un repo git.
+Bash cannot be checked by path before it runs (`echo > x.py` gets through). So after every Bash call, PostToolUse compares `git status` with the previous snapshot. If the role changed files it does not own, the agent is told at once and the violation is recorded in the "Violations" section of `task.md`. This requires the project to be a git repository.
 
-### 4.3 Un pas din Work Plan
+### 4.3 One Work Plan step
 
-**Teste înainte de cod** (implicit, decis 2026-10-21):
+**Tests before code** (the default, decided 2026-10-21):
 
 ```
-MAIN: Pas 3. Criterii: "un cavaler lovește un arcaș: daună 6–9, redusă de apărare"
-      Interfață: damage(attacker, defender, rng) -> int
-  └─► tester  primește DOAR criteriile + interfața și scrie testele
-MAIN: rulează testele → trebuie să PICE (Roșu)
-  ├─ pică din motivul corect (lipsește funcționalitatea) → continuă
-  ├─ pică din alt motiv (eroare de sintaxă, import greșit) → înapoi la tester
-  └─ trec deja → nu testează nimic nou → înapoi la tester
-  └─► worker  primește criteriile + interfața + calea testelor; implementează până trec
-MAIN: rulează testele → Verde
-  └─ dacă worker-ul spune că un test e greșit: MAIN decide cine are dreptate
-     și notează motivul în task.md (test greșit → tester; cod greșit → worker)
+MAIN: Step 3. Criteria: "a knight hits an archer: 6–9 damage, reduced by defense"
+      Interface: damage(attacker, defender, rng) -> int
+  └─► tester  gets ONLY the criteria + the interface and writes the tests
+MAIN: runs the tests → they must FAIL (Red)
+  ├─ fail for the right reason (the feature is missing) → go on
+  ├─ fail for another reason (syntax error, wrong import) → back to the tester
+  └─ already pass → they test nothing new → back to the tester
+  └─► worker  gets the criteria + the interface + the tests' path; implements until they pass
+MAIN: runs the tests → Green
+  └─ if the worker says a test is wrong: MAIN decides who is right
+     and records why in task.md (wrong test → tester; wrong code → worker)
 MAIN: Checkpoint
 ```
 
-- Tester-ul lucrează **orb** prin construcție, pentru că codul nu există încă. Testele verifică ce s-a cerut, nu ce s-a scris.
-- **Roșu** dovedește că testele chiar testează ceva nou. În paralel nu s-ar putea verifica asta.
-- Worker-ul nu poate modifica teste, iar tester-ul nu poate modifica cod. Așa, un eșec nu se poate „repara” slăbind partea celuilalt.
-- Interfața o fixează MAIN la Design, nu tester-ul. Altfel tester-ul ar decide singur cum arată API-ul.
-- Riscul de cod scris „pentru teste”, adică exact ce trece testele și nu ce s-a cerut, îl prinde Implementation Review, unde judges compară codul cu cerința.
-- **Pașii care nu se pot testa automat** (grafică, animații, senzația de joc) au `Verificare: manual — <verificare concretă>`. În locul etapelor Teste/Roșu/Verde au o etapă „Verificare manuală”, cu rezultatul.
-- Cu `workflow.tests_first = false`, tester-ul și worker-ul pornesc în paralel, ca în varianta inițială, iar etapa Roșu dispare.
+- The tester works **blind** by construction, because the code does not exist yet. The tests check what was asked, not what was written.
+- **Red** proves the tests really test something new. Running tester and worker in parallel could not prove that.
+- The worker cannot change tests and the tester cannot change code, so neither can "fix" a failure by weakening the other's side.
+- MAIN fixes the interface during Design, not the tester. Otherwise the tester would decide alone what the API looks like.
+- The risk of code written "for the tests" (exactly what passes them, not what was asked) is caught by Implementation Review, where judges compare the code with the request.
+- **Steps that cannot be tested automatically** (graphics, animation, game feel) say `Verify: manual — <the concrete check>`. Instead of the Tests/Red/Green gates they have one "Manual check" gate, with its result.
+- With `workflow.tests_first = false`, the tester and the worker start in parallel, as in the original design, and the Red gate goes away.
 
-### 4.4 Configurarea: un singur fișier
+### 4.4 Configuration: one file
 
-`.cplugin/config.toml` se commite și se poate edita de mână. A fost ales TOML pentru că acceptă comentarii și Python îl citește fără dependențe (`tomllib`).
+`.cplugin/config.toml` is committed and can be edited by hand. TOML was chosen because it allows comments and Python reads it without dependencies (`tomllib`).
 
 ```toml
 [workflow]
-tests_first = true                  # false = tester și worker în paralel, fără etapa Roșu
+tests_first = true                  # false = tester and worker in parallel, no Red gate
+
+[files]
+extra_code_extensions = []          # added to the built-in list of code extensions
+code_dirs = ["bin", "scripts"]      # everything in these directories counts as code
 
 [roles.worker]
-model = "opus"                      # opus | sonnet | haiku | fable | ID complet
-paths = ["src/**", "app/**"]        # unde are voie să scrie
-max_parallel = 1                    # câți worker simultan
+model = "opus"                      # opus | sonnet | haiku | fable | full model ID
+paths = ["src/**", "app/**"]        # where it may write code
+max_parallel = 1                    # how many workers may run at once
 
 [roles.tester]
 model = "sonnet"
 paths = ["tests/**", "**/test_*.py", "**/*.test.*", "**/*.spec.*"]
 
 [roles.main]
-paths = ["MIND_MAP.md", "mindmap/**"]   # task.md-ul activ e permis mereu
+paths = ["MIND_MAP.md", "mindmap/**"]   # the active task.md is always allowed
 
 [judges]
-mode = "panel"          # single = primul judge disponibil; panel = toți, în paralel
+mode = "panel"          # single = first available seat; panel = every seat, in parallel
 timeout_min = 15
-fallback = "claude"     # dacă niciun CLI extern nu merge: sub-agent Claude read-only; "none" = eroare
+fallback = "claude"     # when no external CLI works: read-only Claude sub-agent; "none" = fail
 
 [[judges.seat]]
 provider = "codex"
-model = ""              # gol = modelul implicit al CLI-ului
+model = ""              # empty = the CLI's default model
 
 [[judges.seat]]
 provider = "agy"
 model = ""
 
 [tests]
-command = "pytest -q"
+command = "npm test"
 
 [review]
 debug_patterns = ["print(", "console.log(", "debugger", "breakpoint()"]
 ```
 
-- MAIN citește modelul fiecărui rol din config și îl transmite când pornește sub-agentul. Pentru a schimba modelul nu se editează plugin-ul.
-- Prompturile de rol stau în plugin (`agents/*.md`). Pentru reguli specifice proiectului, adaugi `.cplugin/roles/<rol>.md`. MAIN îl include în promptul sub-agentului.
-- `tasks config check` validează fișierul: căile tester/worker nu se suprapun, CLI-urile judges există, comanda de test există.
+- MAIN reads each role's model from the config and passes it when it starts the sub-agent. Changing a model never means editing the plugin.
+- Role prompts live in the plugin (`agents/*.md`). For project-specific rules, add `.cplugin/roles/<role>.md`; MAIN includes it in the sub-agent's prompt.
+- `tasks config check` validates the file: tester and worker paths do not overlap, the judges' CLIs exist, the test command exists.
 
 ## 5. Judges
 
-- Le pornește `tasks plan-review <N>` sau `tasks impl-review <N>`, rulat de MAIN.
-- Fiecare judge primește `task.md` (fără triere), `MIND_MAP.md`, fișierul de detalii al modulului și acces de citire la repo. La impl-review primește și diff-ul task-ului. Conversația n-o primește niciodată.
-- Rulează **read-only**: Codex cu propriul sandbox read-only, iar orice alt CLI prin `sandbox-exec` (macOS), cu un profil care interzice scrierea în proiect. În plus, CLI-ul face o verificare de modificare: compară `git status` și hash-ul `task.md` înainte și după. Dacă un judge a schimbat ceva, raportul se marchează cu TAMPER, nu se folosește, iar comanda iese cu eroare (idee preluată din playbook).
-- Raportul fiecărui judge se scrie în `judges/<etapă>-<provider>.md`, iar rezumatul în `task.md`. Le scrie CLI-ul, nu judge-ul.
-- Adaptoarele pentru Codex și Antigravity pornesc de la cele din playbook (`provider/adapters/codex.py`, `antigravity.py`). Pe mașina asta sunt instalate `codex` 0.156.1 și `agy` 1.2.9.
+- `tasks plan-review <N>` or `tasks impl-review <N>`, run by MAIN, starts them.
+- Each judge gets `task.md` (without the triage), `MIND_MAP.md`, the module's detail file and read access to the repository. For impl-review it also gets the task's diff. It never gets the conversation.
+- They run **read-only**: Codex in its own read-only sandbox, any other CLI under `sandbox-exec` (macOS) with a profile that forbids writing to the project. On top of that, the CLI runs a tamper check: it compares `git status` and the hash of `task.md` before and after. If a judge changed anything, its report is marked TAMPER and not used, and the command exits with an error (an idea taken from playbook).
+- Each judge's report goes to `judges/<stage>-<provider>.md`, and the summary into `task.md`. The CLI writes them, not the judge.
+- The Codex and Antigravity adapters start from playbook's (`provider/adapters/codex.py`, `antigravity.py`). The development machine has `codex` 0.156.1 and `agy` 1.2.9.
 
-## 6. Hook-uri
+## 6. Hooks
 
-| Eveniment | Ce face |
+| Event | What it does |
 |---|---|
-| **SessionStart** (`startup`, `resume`, `clear`, `compact`) | Înregistrează sesiunea (ID-ul din payload, procesul Claude care o rulează și `CPLUGIN_SESSION_ID`, prin `CLAUDE_ENV_FILE`). Creează `.claude/bin/` (`tasks`, `board`, `sandbox`). Șterge sesiunile moarte. După `/clear`, dacă ID-ul s-a schimbat, preia task-ul activ al sesiunii anterioare din același proces. **Bagă în context `MIND_MAP.md` și starea task-ului activ** (etapa curentă) |
-| **PreToolUse** (`Edit\|Write\|NotebookEdit\|Bash\|Agent`) | Blochează codul fără task activ. Impune rolurile (4.2). Blochează crearea manuală a task-urilor. Blochează bifarea a 3+ etape deodată, iar la 2 avertizează. Blochează `tasks …` rulat din sub-agenți. Notează acțiunea în tablou |
-| **PostToolUse** (toate) | Doar pentru MAIN: arată etapa curentă (`fișier:linie`) și o întrebare de verificare care depinde de ce a făcut („Is this the simplest change that works?”, „Did it pass for the right reason?”). Pentru sub-agenți face doar verificarea Bash (4.2) și actualizează tabloul |
-| **SubagentStart** | Trece agentul ca activ în tablou. Îi adaugă în context regulile rolului și pasul curent |
-| **SubagentStop** | Trece agentul ca terminat în tablou |
-| **Stop** | Nu-l lasă pe MAIN să termine cât timp sunt etape nebifate. Excepții: tura a fost doar conversație (0 scrieri și <5 tool-uri de la ultimul Stop), MAIN a rulat `tasks pause "<motiv>"` pentru că are nevoie de tine (o decizie, un răspuns, o verificare manuală), modul freehand, sau `stop_hook_active` (ca să nu intre în buclă) |
-| **SessionEnd** | Notează că sesiunea s-a închis, dar **nu șterge starea**. `claude --continue` păstrează același ID de sesiune (verificat), deci task-ul activ trebuie să supraviețuiască repornirii. Sesiunile se șterg abia când procesul lor nu mai există și n-au mai fost folosite de 7 zile |
+| **SessionStart** (`startup`, `resume`, `clear`, `compact`) | Registers the session (the ID from the payload, the Claude process running it, and `CPLUGIN_SESSION_ID` through `CLAUDE_ENV_FILE`). Writes `.claude/bin/` (`tasks`, `board`, `sandbox`). Removes dead sessions. After `/clear`, if the ID changed, takes over the active task of the previous session of the same process. **Loads `MIND_MAP.md` and the active task's state** (the current gate) into context |
+| **PreToolUse** (`Edit\|Write\|NotebookEdit\|Bash\|Agent`) | Blocks code without an active task. Enforces the roles (4.2). Blocks creating tasks by hand. Blocks checking 3+ gates at once and warns at 2. Blocks `tasks …` run from sub-agents. Records the action on the board |
+| **PostToolUse** (all tools) | For MAIN only: shows the current gate (`file:line`) and a check question that depends on what it just did ("Is this the simplest change that works?", "Did it pass for the right reason?"). For sub-agents it only runs the Bash check (4.2) and updates the board |
+| **SubagentStart** | Marks the agent active on the board. Adds the role's rules and the current step to its context |
+| **SubagentStop** | Marks the agent finished on the board |
+| **Stop** | Does not let MAIN end its turn while gates are open. Exceptions: a conversational turn (no writes and fewer than 5 tool calls since the last Stop), MAIN ran `tasks pause "<reason>"` because it needs the user (a decision, an answer, a manual check), freehand mode, or `stop_hook_active` (so it never loops) |
+| **SessionEnd** | Records that the session closed but **does not delete its state**. `claude --continue` keeps the same session ID (verified), so the active task must survive the restart. Sessions are removed only when their process is gone and they have been idle for 7 days |
 
-Principii, preluate din problemele playbook:
+Principles, learned from playbook's problems:
 
-- un hook nu are voie să dărâme sesiunea: la eroare internă nu blochează nimic, cu o singură excepție, regula „fără task activ”, care blochează și când hook-ul nu știe sigur;
-- hook-urile sunt scrise în Python (stdlib, ≥3.11), cu un singur punct de intrare (`hooks/run.py <eveniment>`), nu în bash care cheamă Python de 5 ori pe apel;
-- curățarea sesiunilor nu urmează niciodată link-uri simbolice.
+- a hook must never take the session down: on an internal error it blocks nothing, with one exception, the "no active task" rule, which also blocks when the hook cannot tell for sure;
+- hooks are written in Python (stdlib, ≥3.11) with a single entry point (`hooks/run.py <event>`), not in bash that calls Python five times per call;
+- session cleanup never follows symbolic links.
 
-## 7. Tabloul ASCII
+## 7. The ASCII board
 
 ```
-┌ TASK 007 · programari-pacient ─ etapa 9/18 ───────────────┐
-│ Pas 2: POST /programari                                   │
+┌ TASK 007 · project-filter ─ gate 9/18 ────────────────────┐
+│ Step 2: category filter                                   │
 ├─────────┬───────────┬─────────────────────────────────────┤
-│ MAIN    │ ● așteaptă│ worker, tester                      │
-│ worker  │ ● Edit    │ src/programari/service.py      0:42 │
-│ tester  │ ● Write   │ tests/test_programari.py       0:38 │
+│ MAIN    │ ● waiting │ worker, tester                      │
+│ worker  │ ● Edit    │ src/projects/filter.ts         0:42 │
+│ tester  │ ● Write   │ tests/projects/filter.test.ts  0:38 │
 │ judge   │ ○ —       │                                     │
 └─────────┴───────────┴─────────────────────────────────────┘
 ```
 
-- Starea se scrie în `.cplugin/sessions/<id>/board.json` de hook-uri (SubagentStart/Stop, PreToolUse) și de CLI (judges care rulează, cu timpul scurs).
-- `.claude/bin/board --watch` se rulează într-un al doilea terminal și se reîmprospătează la ~1s. Fără argumente arată sesiunea activă a proiectului, iar cu `--session` o alegi.
-- Câte un rând pentru fiecare agent pornit. Dacă rulează doi worker în paralel, apar două rânduri.
-- `/cplugin:board` afișează același tablou o dată, în chat.
+- The hooks (SubagentStart/Stop, PreToolUse) and the CLI (running judges, with elapsed time) write the state to `.cplugin/sessions/<id>/board.json`.
+- `.claude/bin/board --watch` runs in a second terminal and refreshes about once a second. Without arguments it shows the project's active session; `--session` picks one.
+- One row per running agent: two workers in parallel show as two rows.
+- `/cplugin:board` prints the same board once, in the chat.
 
-## 8. Freehand și sandbox
+## 8. Freehand and sandbox
 
-- **`/cplugin:freehand`**: suspendă blocajele (fără task, roluri, Stop) până la următorul `tasks work`. Tabloul arată „FREEHAND”. Ce s-a modificat se notează la reactivare, ca să nu se piardă.
-- **`.claude/bin/sandbox`**: pornește `claude --dangerously-skip-permissions` sub `sandbox-exec`. Poate scrie doar în proiect, `.git` e read-only, iar restul sistemului e blocat. Dacă `sandbox-exec` lipsește, **refuză să pornească**, în loc să ruleze neizolat (playbook doar avertiza).
+- **`/cplugin:freehand`** suspends the blocks (no task, roles, Stop) until the next `tasks work`. The board shows "FREEHAND". What changed is recorded on reactivation, so it is not lost.
+- **`.claude/bin/sandbox`** starts `claude --dangerously-skip-permissions` under `sandbox-exec`. It can write only inside the project, `.git` is read-only, and the rest of the system is blocked. When `sandbox-exec` is missing it **refuses to start** instead of running unconfined (playbook only warned).
 
-## 9. Structura plugin-ului
+## 9. Plugin layout
 
 ```
 cplugin/
 ├── .claude-plugin/
 │   ├── plugin.json
-│   └── marketplace.json        # marketplace local, pentru instalare
+│   └── marketplace.json        # marketplace manifest, for installing
 ├── agents/
 │   ├── worker.md
 │   ├── tester.md
-│   └── judge.md                # rezervă Claude, doar Read/Grep/Glob
-├── skills/                     # /cplugin:<nume>. Skills, nu commands/ (recomandarea actuală)
+│   └── judge.md                # Claude fallback, Read/Grep/Glob only
+├── skills/                     # /cplugin:<name>. Skills, not commands/ (the current recommendation)
 │   ├── init/  mindmap/  freehand/  board/
-│   └── workflow/SKILL.md       # cum coordonează MAIN un task
+│   └── workflow/SKILL.md       # how MAIN coordinates a task
 ├── hooks/
 │   ├── hooks.json
-│   └── run.py                  # punct unic de intrare pentru toate hook-urile
-├── cplugin/                    # pachetul Python: tasks CLI, config, roluri, tablou, judges
-├── templates/                  # task.md, MIND_MAP.md, mindmap-module.md, CLAUDE.md, config.toml
-├── bin/                        # tasks.py, board.py, sandbox: puncte de intrare
-└── tests/                      # unittest stdlib; hook-urile testate cu JSON de intrare
+│   └── run.py                  # single entry point for every hook
+├── cplugin/                    # the Python package: tasks CLI, config, roles, board, judges
+├── templates/                  # task.md, step shapes, MIND_MAP.md, mindmap-module.md, CLAUDE.md, config.toml
+├── bin/                        # tasks.py, board.py, sandbox: entry points
+└── tests/                      # stdlib unittest; hooks tested with JSON payloads
 ```
 
-## 10. Un proiect după `/cplugin:init`
+## 10. A project after `/cplugin:init`
 
 ```
-proiect/
-├── CLAUDE.md                   # secțiune scurtă: workflow + comenzi
+project/
+├── CLAUDE.md                   # a short section: workflow + commands
 ├── MIND_MAP.md
 ├── mindmap/
 ├── .cplugin/
-│   ├── config.toml             # se commite
-│   ├── roles/                  # opțional: reguli de rol pentru proiect
-│   ├── tasks/                  # se commite: istoria deciziilor
-│   └── sessions/               # stare runtime, în .gitignore
+│   ├── config.toml             # committed
+│   ├── roles/                  # optional: project-specific role rules
+│   ├── tasks/                  # committed: the history of decisions
+│   └── sessions/               # runtime state, gitignored
 └── .claude/
     ├── bin/                    # tasks, board, sandbox
-    └── settings.json           # deny: TodoWrite, EnterPlanMode; playbook dezactivat aici
+    └── settings.json           # deny: TodoWrite, EnterPlanMode; playbook disabled here
 ```
 
-`init` e idempotent: rulat din nou, actualizează secțiunile plugin-ului și nu atinge restul. Dacă proiectul nu e repo git, propune `git init`.
+`init` is idempotent: run again, it updates the plugin's sections and leaves everything else alone. If the project is not a git repository, it suggests `git init`.
 
-## 11. Limitări cunoscute și lucruri de verificat în prototip
+## 11. Known limits and things to verify in the prototype
 
-- **Același `session_id` în sub-agenți?** Documentația nu spune. Trebuie verificat înainte să legăm starea de el. Altfel, ne legăm de ID-ul procesului, ca playbook.
-- ~~Forma exactă a `agent_type`~~ Confirmat în documentație: `cplugin:worker`, `cplugin:tester`.
-- **`CLAUDE_PLUGIN_ROOT` nu există în comenzile Bash ale modelului.** E înlocuit doar în textul skill-urilor și în hook-uri. De aceea proiectul primește launchere în `.claude/bin/`, rescrise la fiecare pornire de sesiune (calea se schimbă la upgrade).
-- **Agenții din plugin ignoră `hooks` și `permissionMode` din frontmatter.** Toată impunerea trece prin `hooks/hooks.json`, ceea ce e oricum planul.
-- **Un plugin nu poate livra `permissions.deny` sau status line prin setările lui.** De aceea `init` scrie în `.claude/settings.json` al proiectului.
-- **Bash nu poate fi oprit înainte**, doar detectat după (4.2).
-- **Coexistența cu playbook**: playbook se activează când găsește `.agent/tasks/`. Noi folosim `.cplugin/`, deci nu se activează. `init` îl dezactivează oricum în proiect (`enabledPlugins`), ca Claude să nu-i folosească din greșeală skill-urile.
-- **Nu interzicem tool-ul `Agent`** (playbook interzicea `Task`, fostul lui nume). Ar opri sub-agenții.
+- **Same `session_id` in sub-agents?** The documentation does not say. Verify before tying state to it; otherwise tie it to the process ID, as playbook does.
+- ~~The exact form of `agent_type`~~ Confirmed in the documentation: `cplugin:worker`, `cplugin:tester`.
+- **`CLAUDE_PLUGIN_ROOT` does not exist in the model's Bash commands.** It is substituted only in skill text and in hooks. That is why the project gets launchers in `.claude/bin/`, rewritten at every session start (the path changes on upgrade).
+- **Plugin agents ignore `hooks` and `permissionMode` in their frontmatter.** All enforcement goes through `hooks/hooks.json`, which was the plan anyway.
+- **A plugin cannot ship `permissions.deny` or a status line through its settings.** That is why `init` writes into the project's `.claude/settings.json`.
+- **Bash cannot be stopped beforehand**, only detected afterwards (4.2).
+- **Coexisting with playbook**: playbook activates when it finds `.agent/tasks/`. We use `.cplugin/`, so it stays inactive. `init` disables it in the project anyway (`enabledPlugins`), so Claude does not use its skills by mistake.
+- **We do not deny the `Agent` tool** (playbook denied `Task`, its former name). That would stop the sub-agents.
 
-## 12. Față de playbook
+## 12. Compared with playbook
 
-| Păstrăm | Schimbăm | Renunțăm |
+| We keep | We change | We drop |
 |---|---|---|
-| task.md ca plan + jurnal, bifat pe rând | Memoria pe două niveluri (MIND_MAP + `mindmap/`) | Jurnalul de mesaje (UserPromptSubmit). Cerința se copiază în task.md |
-| Judges care nu văd conversația, verificarea TAMPER | Roluri stricte impuse prin hook (MAIN / worker / tester) | Launcherele Codex/Grok/Pi pentru *scris* cod. Alți furnizori doar ca judges |
-| Hook-urile SessionStart, PreToolUse, PostToolUse, Stop, SessionEnd | Hook-uri în Python, cu un singur punct de intrare | Monitorul (al doilea agent care urmărește) |
-| Freehand, sandbox | Configurarea agenților într-un singur `config.toml` | Skill-ul de merge multi-user, per-user lanes |
-| Curățarea sesiunilor după procesul viu | Tabloul ASCII live; sandbox-ul refuză să pornească neizolat | |
+| task.md as plan + log, checked one gate at a time | Two-level memory (MIND_MAP + `mindmap/`) | The chat log (UserPromptSubmit). The request is copied into task.md instead |
+| Judges that do not see the conversation; the TAMPER check | Strict roles enforced by hooks (MAIN / worker / tester) | The Codex/Grok/Pi launchers for *writing* code. Other providers only judge |
+| The SessionStart, PreToolUse, PostToolUse, Stop, SessionEnd hooks | Hooks in Python, with a single entry point | The monitor (a second agent watching) |
+| Freehand, sandbox | Agent configuration in a single `config.toml` | The multi-user merge skill and per-user lanes |
+| Session cleanup by process liveness | A live ASCII board; the sandbox refuses to run unconfined | |
 
-## 13. Decizii deschise
+## 13. Open decisions
 
-1. **Numele final** al plugin-ului. Deocamdată rămâne `cplugin`.
-2. ~~Limba~~ **Decis (2026-10-21): engleză** pentru șabloane, prompturile de rol, mesajele hook-urilor și CLI. SPEC.md rămâne în română.
-3. **Câți worker în paralel** implicit. Deocamdată 1, configurabil.
-4. **Git obligatoriu?** Deocamdată da: `init` avertizează dacă proiectul nu e repo git. Fără git nu merg verificarea Bash, diff-ul pentru impl-review și TAMPER.
+1. **The plugin's final name.** For now it stays `cplugin`.
+2. ~~Language~~ **Decided (2026-10-21): English** for templates, role prompts, hook messages, CLI output and all documentation, this specification included.
+3. **How many workers in parallel** by default. For now 1, configurable.
+4. **Git required?** For now yes: `init` warns when the project is not a git repository. Without git, the Bash check, the impl-review diff and the TAMPER check do not work.
 
-## 14. Ordinea de implementare
+## 14. Implementation order
 
-Fiecare etapă vine cu teste și se poate folosi independent.
+Each milestone comes with tests and is usable on its own.
 
-1. ✅ **Schelet** (2026-10-21). Manifest, marketplace local, `init`, șabloane, SessionStart care încarcă `MIND_MAP.md`, `/cplugin:mindmap`. 28 de teste; verificat și cu `claude -p --plugin-dir`.
-2. ✅ **Task-uri** (2026-10-21). CLI-ul `tasks` (new/work/stop/done/status/list/pause) + PreToolUse (fără task, creare manuală, 3+ bife, bifă fără rezultat) + PostToolUse (etapa curentă + întrebări) + Stop + SessionEnd. Teste întâi (Roșu/Verde) în șablon. 86 de teste; verificat cu `claude -p`: un task complet parcurs cap-coadă, blocarea editării fără task și blocarea opririi cu etape deschise. `plan-review` și `impl-review` doar afișează un mesaj până la etapa 5.
-3. **Agenți și roluri.** `agents/worker.md`, `tester.md`, regulile de roluri în PreToolUse, verificarea Bash, SubagentStart/Stop, `config.toml` + `tasks config check`.
-4. **Tablou.** `board.json` + `board --watch` + `/cplugin:board`.
-5. **Judges.** Adaptoare Codex și agy, sandbox read-only, TAMPER, panel, rezerva Claude.
-6. **Freehand și sandbox.**
+1. ✅ **Skeleton** (2026-10-21). Manifest, marketplace, `init`, templates, SessionStart loading `MIND_MAP.md`, `/cplugin:mindmap`. 28 tests; also verified with `claude -p --plugin-dir`.
+2. ✅ **Tasks** (2026-10-21). The `tasks` CLI (new/work/stop/done/status/list/pause) + PreToolUse (no task, manual creation, 3+ checks, check without an outcome) + PostToolUse (current gate + questions) + Stop + SessionEnd. Tests first (Red/Green) in the template. 86 tests; verified with `claude -p`: a full task worked end to end, the no-task block and the open-gates Stop block. `plan-review` and `impl-review` only print a notice until milestone 5.
+3. **Agents and roles.** `agents/worker.md`, `tester.md`, role rules in PreToolUse, the Bash check, SubagentStart/Stop, `config.toml` + `tasks config check`.
+4. **Board.** `board.json` + `board --watch` + `/cplugin:board`.
+5. **Judges.** Codex and agy adapters, read-only sandbox, TAMPER, panel, Claude fallback.
+6. **Freehand and sandbox.**

@@ -31,11 +31,11 @@ class SessionStartTest(TempDirCase):
 
     def test_loads_real_map_from_a_subdirectory(self):
         self.init_project()
-        (self.project_dir / "MIND_MAP.md").write_text("# MIND_MAP\n\n## [2] Patient → mindmap/patient.md\n")
+        (self.project_dir / "MIND_MAP.md").write_text("# MIND_MAP\n\n## [2] Projects → mindmap/projects.md\n")
         sub = self.project_dir / "src" / "deep"
         sub.mkdir(parents=True)
         text = self.context(self.run_hook("session-start", self.payload(cwd=str(sub))))
-        self.assertIn("## [2] Patient → mindmap/patient.md", text)
+        self.assertIn("## [2] Projects → mindmap/projects.md", text)
 
     def test_oversized_map_is_clipped_under_the_cap(self):
         self.init_project()

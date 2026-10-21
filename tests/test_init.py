@@ -14,8 +14,8 @@ class InitTest(TempDirCase):
                     ".cplugin/sessions", "mindmap", "MIND_MAP.md", "CLAUDE.md",
                     ".claude/settings.json", ".claude/bin/tasks", ".claude/bin/.gitignore"):
             self.assertTrue((p / rel).exists(), rel)
-        self.assertIn("# MIND_MAP — Clinic", (p / "MIND_MAP.md").read_text())
-        self.assertTrue((p / "CLAUDE.md").read_text().startswith("# Clinic\n"))
+        self.assertIn("# MIND_MAP — Portfolio", (p / "MIND_MAP.md").read_text())
+        self.assertTrue((p / "CLAUDE.md").read_text().startswith("# Portfolio\n"))
 
     def test_launcher_runs_the_cli(self):
         self.init_project()
@@ -27,7 +27,7 @@ class InitTest(TempDirCase):
     def test_second_run_changes_nothing(self):
         self.init_project()
         before = {f: f.read_bytes() for f in self.project_dir.rglob("*") if f.is_file()}
-        result = self.run_tasks("init", "--name", "Clinic")
+        result = self.run_tasks("init", "--name", "Portfolio")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("created:", result.stdout)
         self.assertNotIn("updated:", result.stdout)
