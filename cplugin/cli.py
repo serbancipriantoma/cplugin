@@ -166,6 +166,28 @@ def _cmd_review(args: argparse.Namespace, plugin_root: Path) -> int:
     return 0
 
 
+def _cmd_config(args: argparse.Namespace, plugin_root: Path) -> int:
+    project = _project()
+    cfg = config.load(project)
+    if args.action == "show":
+        roles_cfg = cfg["roles"]
+        print(f"workflow.tests_first = {str(cfg['workflow']['tests_first']).lower()}")
+        print(f"tests.command = {cfg['tests']['command'] or '(not set)'}")
+        print(f"main:   paths {', '.join(roles_cfg['main']['paths'])}")
+        for role in ("worker", "tester"):
+            section = roles_cfg[role]
+            print(f"{role}: model {section.get('model')} · paths {', '.join(section.get('paths', []))}")
+        seats = [str(s.get("provider")) for s in cfg["judges"].get("seat", []) if isinstance(s, dict)]
+        print(f"judges: {cfg['judges'].get('mode')} · {', '.join(seats) or '(no seats)'}")
+        return 0
+    problems = config.check(cfg)
+    for level, message in problems:
+        print(f"{level}: {message}")
+    if not problems:
+        print("config OK")
+    return 1 if any(level == "ERROR" for level, _ in problems) else 0
+
+
 def _cmd_init(args: argparse.Namespace, plugin_root: Path) -> int:
     target = Path(args.dir or os.getcwd()).resolve()
     enclosing = find_project_root(target)
@@ -221,6 +243,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("pause", help="end the turn with gates open because the user is needed")
     p.add_argument("reason", nargs="+")
     p.set_defaults(func=_cmd_pause)
+
+    p = sub.add_parser("config", help="show the effective configuration, or check it")
+    p.add_argument("action", choices=("show", "check"))
+    p.set_defaults(func=_cmd_config)
 
     for name in ("plan-review", "impl-review"):
         p = sub.add_parser(name, help="run the judges (milestone 5)")

@@ -9,11 +9,14 @@ A Claude Code plugin for task-gated, multi-agent work on a codebase:
   first: write the tests from the criteria, see them fail (Red), implement until they
   pass (Green). Hooks block code edits without an active task, checking several gates
   at once, and ending a turn with open gates.
-- **Strict agent roles** (planned): a coordinating main agent, a worker that writes code,
-  a tester that writes tests from the requirement, and judges from other providers.
+- **Strict agent roles.** The main agent coordinates and never writes code or tests.
+  For each step it starts `cplugin:tester` to write the tests from the criteria, then
+  `cplugin:worker` to write the code. Hooks let each role write only what it owns, and
+  files changed through Bash by the wrong role are caught and recorded in the task.
+- **Judges** from other providers (planned): Codex and Antigravity review plans and code.
 
 The `tasks` CLI (`.claude/bin/tasks` in a project): `new`, `work`, `status`, `list`,
-`pause`, `stop`, `done`.
+`pause`, `stop`, `done`, `config show|check`.
 
 The design, its decisions and the milestone plan are in [SPEC.md](SPEC.md).
 

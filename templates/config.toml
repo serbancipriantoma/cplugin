@@ -10,16 +10,23 @@ tests_first = true      # tests, then Red, then code, then Green; false = tests 
 extra_code_extensions = []
 code_dirs = ["bin", "scripts"]   # everything in these directories counts as code, except docs and data
 
+# Roles. While a task is active each role writes only what it owns: a code
+# file matching the tester's paths is a test, any other code file matching the
+# worker's paths is production code. Files that are not code (docs, data,
+# images) are open to every role, except the main agent's own paths.
+# model: opus | sonnet | haiku | fable, passed when the agent is started.
+
 [roles.worker]
 # Claude sub-agent that writes production code.
-model = "opus"                      # opus | sonnet | haiku | fable | full model ID
-paths = ["src/**", "app/**"]        # where it may write code
+model = "opus"
+paths = ["**"]                      # narrow it (e.g. ["src/**"]) to fence the worker in
 max_parallel = 1                    # how many workers may run at once
 
 [roles.tester]
-# Claude sub-agent that writes tests from the step's criteria, without seeing the new code.
+# Claude sub-agent that writes tests from the step's criteria, before the code exists.
 model = "sonnet"
-paths = ["tests/**", "**/test_*.py", "**/*_test.*", "**/*.test.*", "**/*.spec.*"]
+paths = ["tests/**", "test/**", "**/__tests__/**", "**/test_*.py", "**/*_test.*",
+         "**/*.test.*", "**/*.spec.*"]
 
 [roles.main]
 # The main session. It coordinates and never writes code or tests itself.

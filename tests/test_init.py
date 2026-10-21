@@ -1,5 +1,6 @@
 import json
 import subprocess
+import tomllib
 
 from helpers import PLUGIN_ROOT, TempDirCase
 
@@ -78,6 +79,56 @@ class InitTest(TempDirCase):
     def test_warns_outside_git(self):
         result = self.run_tasks("init")
         self.assertIn("WARNING: not a git repository", result.stdout)
+
+
+OLD_CONFIG = """[workflow]
+tests_first = true
+
+[roles.worker]
+# Claude sub-agent that writes production code.
+model = "opus"                      # opus | sonnet | haiku | fable | full model ID
+paths = ["src/**", "app/**"]        # where it may write code
+max_parallel = 1
+
+[roles.tester]
+model = "sonnet"
+paths = ["tests/**", "**/test_*.py", "**/*_test.*", "**/*.test.*", "**/*.spec.*"]
+
+[roles.main]
+paths = ["MIND_MAP.md", "mindmap/**"]
+
+[tests]
+command = "pytest -q"
+"""
+
+
+class ConfigUpgradeTest(TempDirCase):
+    def config(self) -> str:
+        return (self.project_dir / ".cplugin" / "config.toml").read_text()
+
+    def test_upgrades_untouched_old_defaults_and_nothing_else(self):
+        (self.project_dir / ".cplugin").mkdir()
+        (self.project_dir / ".cplugin" / "config.toml").write_text(OLD_CONFIG)
+        result = self.run_tasks("init")
+        self.assertIn("updated: .cplugin/config.toml (old defaults upgraded: roles.worker.paths, "
+                      "roles.tester.paths)", result.stdout)
+        text = self.config()
+        self.assertIn('paths = ["**"]', text)
+        self.assertIn('"**/__tests__/**"', text)
+        self.assertIn('paths = ["MIND_MAP.md", "mindmap/**"]', text)
+        self.assertIn('command = "pytest -q"', text)
+        self.assertIn("# Claude sub-agent that writes production code.", text)
+        cfg = tomllib.loads(text)
+        self.assertEqual(cfg["roles"]["worker"]["paths"], ["**"])
+        self.assertEqual(cfg["roles"]["worker"]["max_parallel"], 1)
+        self.assertNotIn("updated: .cplugin/config.toml", self.run_tasks("init").stdout)
+
+    def test_customized_paths_are_left_alone(self):
+        (self.project_dir / ".cplugin").mkdir()
+        custom = OLD_CONFIG.replace('["src/**", "app/**"]', '["game/**"]')
+        (self.project_dir / ".cplugin" / "config.toml").write_text(custom)
+        self.run_tasks("init")
+        self.assertIn('paths = ["game/**"]', self.config())
 
 
 class MergeTest(TempDirCase):

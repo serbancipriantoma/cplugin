@@ -46,3 +46,6 @@ automatically (graphics, animation, feel) use the manual shape.
 
 ## Parked
 (what came up and is out of scope, with enough context for a future task)
+
+## Violations
+(recorded by the hooks: files a role changed through Bash without owning them)

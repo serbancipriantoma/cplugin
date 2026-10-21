@@ -56,10 +56,10 @@ class NoTaskTest(ProjectCase):
     def test_outside_the_project_is_not_policed(self):
         self.assertIsNone(self.hook_json("pre-tool-use", self.payload("Write", {"file_path": "/tmp/x.py"})))
 
-    def test_active_task_allows_code(self):
+    def test_active_task_lets_the_worker_write_code(self):
         self.new_task()
         self.activate()
-        self.assertIsNone(self.write("src/game.ts"))
+        self.assertIsNone(self.write("src/game.ts", agent_id="w1", agent_type="cplugin:worker"))
 
     def test_unknown_session_fails_closed(self):
         out = self.write("src/game.ts", session_id="never-registered")

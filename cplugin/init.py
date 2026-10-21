@@ -90,6 +90,35 @@ def _rel(project: Project, path: Path) -> str:
     return str(path.relative_to(project.root))
 
 
+# Settings whose old default a newer version replaced. Init upgrades a value
+# only while it still equals the old default, i.e. the user never changed it.
+CONFIG_UPGRADES = [
+    ("roles.worker", "paths", '["src/**", "app/**"]',
+     'paths = ["**"]                      # narrow it (e.g. ["src/**"]) to fence the worker in'),
+    ("roles.tester", "paths", '["tests/**", "**/test_*.py", "**/*_test.*", "**/*.test.*", "**/*.spec.*"]',
+     'paths = ["tests/**", "test/**", "**/__tests__/**", "**/test_*.py", "**/*_test.*",\n'
+     '         "**/*.test.*", "**/*.spec.*"]'),
+]
+
+
+def upgrade_config(text: str) -> tuple[str, list[str]]:
+    """Replace untouched old defaults in config.toml text; comments and every
+    other line stay as they are. Returns the new text and the settings changed."""
+    changed = []
+    for section, key, old_value, new_line in CONFIG_UPGRADES:
+        header = re.search(rf"^\[{re.escape(section)}\][ \t]*$", text, re.MULTILINE)
+        if not header:
+            continue
+        following = re.search(r"^\[", text[header.end():], re.MULTILINE)
+        end = header.end() + following.start() if following else len(text)
+        line = re.compile(rf"^{re.escape(key)}\s*=\s*{re.escape(old_value)}[^\n]*$", re.MULTILINE)
+        body, count = line.subn(lambda _: new_line, text[header.end():end], count=1)
+        if count:
+            text = text[:header.end()] + body + text[end:]
+            changed.append(f"{section}.{key}")
+    return text, changed
+
+
 def init_project(root: Path, plugin_root: Path, name: str | None = None) -> Report:
     project = Project(root.resolve())
     name = name or project.root.name
@@ -113,6 +142,15 @@ def init_project(root: Path, plugin_root: Path, name: str | None = None) -> Repo
         else:
             write_atomic(path, content)
             report.record("created", _rel(project, path))
+
+    config_text = project.config_path.read_text(encoding="utf-8")
+    upgraded, settings_changed = upgrade_config(config_text)
+    if settings_changed:
+        write_atomic(project.config_path, upgraded)
+        rel = _rel(project, project.config_path)
+        if rel in report.unchanged:
+            report.unchanged.remove(rel)
+        report.record("updated", f"{rel} (old defaults upgraded: {', '.join(settings_changed)})")
 
     existing = project.claude_md.read_text(encoding="utf-8") if project.claude_md.is_file() else None
     merged = merge_claude_md(existing, _template(plugin_root, "CLAUDE.md"), name)

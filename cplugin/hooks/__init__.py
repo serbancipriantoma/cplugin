@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import post_tool_use, pre_tool_use, session_end, session_start, stop
+from . import post_tool_use, pre_tool_use, session_end, session_start, stop, subagent
 
 HANDLERS = {
     "session-start": session_start.handle,
     "pre-tool-use": pre_tool_use.handle,
     "post-tool-use": post_tool_use.handle,
+    "subagent-start": subagent.handle_start,
+    "subagent-stop": subagent.handle_stop,
     "stop": stop.handle,
     "session-end": session_end.handle,
 }

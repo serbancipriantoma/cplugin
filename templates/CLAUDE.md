@@ -23,14 +23,17 @@ This project uses the cplugin workflow.
 - **Work the gates in task.md top to bottom.** One gate at a time: do its work,
   check the box, append the outcome on the same line. Edit open gates when the
   plan changes. `tasks status` shows the next gate; `tasks done` closes the task.
-- **Tests before code.** For each step: write the tests from the criteria, run
-  them and confirm they fail for the right reason (Red), then implement until
-  they pass (Green). Steps that cannot be tested automatically say
+- **The main agent coordinates; sub-agents write.** The main session never
+  writes code or tests. For each Work Plan step it starts `cplugin:tester` to
+  write the tests from the criteria, runs them to confirm they fail for the
+  right reason (Red), starts `cplugin:worker` to implement until they pass
+  (Green), and records each result on its gate. The `cplugin:workflow` skill
+  has the details. Steps that cannot be tested automatically say
   `Verify: manual — <check>`.
-- **Hooks enforce this.** Code edits are blocked without an active task, and
-  ending a turn with open gates is blocked. When you need the user (a decision,
-  an answer, a manual check), run `.claude/bin/tasks pause "<what you need>"`
-  and ask.
+- **Hooks enforce this.** Code edits are blocked without an active task; each
+  role may write only what it owns; ending a turn with open gates is blocked
+  unless sub-agents are still running. When you need the user (a decision, an
+  answer, a manual check), run `.claude/bin/tasks pause "<what you need>"` and ask.
 - **Build or refresh the map** with `/cplugin:mindmap`. Configuration lives in
   `.cplugin/config.toml`.
 <!-- cplugin:end -->

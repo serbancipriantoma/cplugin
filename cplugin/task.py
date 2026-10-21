@@ -147,6 +147,24 @@ def create(project: Project, plugin_root: Path, task_type: str, slug: str,
     return Task(num, task_type, slug, directory), warnings
 
 
+VIOLATIONS_HEADING = "## Violations"
+
+
+def record_violation(task: Task, line: str) -> None:
+    """Append `- <line>` to the Violations section, creating it at the end if needed."""
+    text = task.text()
+    entry = f"- {line}\n"
+    start = text.find(f"\n{VIOLATIONS_HEADING}\n")
+    if start == -1:
+        text = text.rstrip("\n") + f"\n\n{VIOLATIONS_HEADING}\n{entry}"
+    else:
+        following = text.find("\n## ", start + 1)
+        insert_at = len(text) if following == -1 else following + 1
+        before = text[:insert_at].rstrip("\n") + "\n"
+        text = before + entry + ("\n" + text[insert_at:] if following != -1 else "")
+    write_atomic(task.path, text)
+
+
 def work_plan_gates(task: Task) -> list[gates.Gate]:
     return [g for g in task.gates() if g.section.startswith("3.")]
 

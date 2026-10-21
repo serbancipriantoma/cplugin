@@ -208,13 +208,14 @@ extra_code_extensions = []          # added to the built-in list of code extensi
 code_dirs = ["bin", "scripts"]      # everything in these directories counts as code
 
 [roles.worker]
-model = "opus"                      # opus | sonnet | haiku | fable | full model ID
-paths = ["src/**", "app/**"]        # where it may write code
+model = "opus"                      # opus | sonnet | haiku | fable
+paths = ["**"]                      # any code that is not a test; narrow it to fence the worker in
 max_parallel = 1                    # how many workers may run at once
 
 [roles.tester]
 model = "sonnet"
-paths = ["tests/**", "**/test_*.py", "**/*.test.*", "**/*.spec.*"]
+paths = ["tests/**", "test/**", "**/__tests__/**", "**/test_*.py", "**/*_test.*",
+         "**/*.test.*", "**/*.spec.*"]
 
 [roles.main]
 paths = ["MIND_MAP.md", "mindmap/**"]   # the active task.md is always allowed
@@ -239,9 +240,10 @@ command = "npm test"
 debug_patterns = ["print(", "console.log(", "debugger", "breakpoint()"]
 ```
 
-- MAIN reads each role's model from the config and passes it when it starts the sub-agent. Changing a model never means editing the plugin.
+- A code file matching the tester's paths is a test; any other code file matching the worker's paths is production code. Code that matches neither belongs to no role, and the hook says to add it to a role's paths. Settings left out of the file fall back to these defaults, so older configs keep working.
+- MAIN reads each role's model from the config (`tasks config show`) and passes it when it starts the sub-agent; the hook refuses a cplugin agent started with another model. Changing a model never means editing the plugin. The Agent tool takes only the aliases, so a full model ID cannot be enforced.
 - Role prompts live in the plugin (`agents/*.md`). For project-specific rules, add `.cplugin/roles/<role>.md`; MAIN includes it in the sub-agent's prompt.
-- `tasks config check` validates the file: tester and worker paths do not overlap, the judges' CLIs exist, the test command exists.
+- `tasks config check` validates the file: types, empty role paths, models that cannot be enforced, the test command and the judges' CLIs being on PATH.
 
 ## 5. Judges
 
@@ -256,11 +258,11 @@ debug_patterns = ["print(", "console.log(", "debugger", "breakpoint()"]
 | Event | What it does |
 |---|---|
 | **SessionStart** (`startup`, `resume`, `clear`, `compact`) | Registers the session (the ID from the payload, the Claude process running it, and `CPLUGIN_SESSION_ID` through `CLAUDE_ENV_FILE`). Writes `.claude/bin/` (`tasks`, `board`, `sandbox`). Removes dead sessions. After `/clear`, if the ID changed, takes over the active task of the previous session of the same process. **Loads `MIND_MAP.md` and the active task's state** (the current gate) into context |
-| **PreToolUse** (`Edit\|Write\|NotebookEdit\|Bash\|Agent`) | Blocks code without an active task. Enforces the roles (4.2). Blocks creating tasks by hand. Blocks checking 3+ gates at once and warns at 2. Blocks `tasks …` run from sub-agents. Records the action on the board |
-| **PostToolUse** (all tools) | For MAIN only: shows the current gate (`file:line`) and a check question that depends on what it just did ("Is this the simplest change that works?", "Did it pass for the right reason?"). For sub-agents it only runs the Bash check (4.2) and updates the board |
-| **SubagentStart** | Marks the agent active on the board. Adds the role's rules and the current step to its context |
-| **SubagentStop** | Marks the agent finished on the board |
-| **Stop** | Does not let MAIN end its turn while gates are open. Exceptions: a conversational turn (no writes and fewer than 5 tool calls since the last Stop), MAIN ran `tasks pause "<reason>"` because it needs the user (a decision, an answer, a manual check), freehand mode, or `stop_hook_active` (so it never loops) |
+| **PreToolUse** (`Edit\|Write\|MultiEdit\|NotebookEdit\|Bash\|Agent`) | Blocks code without an active task. Enforces the roles (4.2); sub-agents also stay out of task.md and `.cplugin/`. Blocks creating tasks by hand. Blocks checking 3+ gates at once and warns at 2. Blocks `tasks …` commands that change state when a sub-agent runs them. Starts cplugin agents only for an active task, with the configured model and without worktree isolation. Snapshots `git status` before Bash. Records the action for the board |
+| **PostToolUse** (all tools) | For MAIN: shows the current gate (`file:line`) and a check question that depends on what it just did ("Is this the simplest change that works?", "Did it pass for the right reason?"). For every agent: the Bash check (4.2) and the board record |
+| **SubagentStart** | Records the agent as running. For the worker and the tester, adds the role's rules and the current step to its context; for any other sub-agent, a note that only those two write code and tests |
+| **SubagentStop** | Records the agent as finished |
+| **Stop** | Does not let MAIN end its turn while gates are open. Exceptions: a conversational turn (no writes and fewer than 5 tool calls since the last Stop), sub-agents still running (they run in the background, and MAIN ends its turn to wait for them; verified), MAIN ran `tasks pause "<reason>"` because it needs the user (a decision, an answer, a manual check), freehand mode, or `stop_hook_active` (so it never loops) |
 | **SessionEnd** | Records that the session closed but **does not delete its state**. `claude --continue` keeps the same session ID (verified), so the active task must survive the restart. Sessions are removed only when their process is gone and they have been idle for 7 days |
 
 Principles, learned from playbook's problems:
@@ -332,11 +334,12 @@ project/
     └── settings.json           # deny: TodoWrite, EnterPlanMode; playbook disabled here
 ```
 
-`init` is idempotent: run again, it updates the plugin's sections and leaves everything else alone. If the project is not a git repository, it suggests `git init`.
+`init` is idempotent: run again, it updates the plugin's sections and leaves everything else alone. In `config.toml` it changes only settings that still hold a default an older version wrote and a newer one replaced (for example the worker's paths); values the user changed are never touched. If the project is not a git repository, it suggests `git init`.
 
 ## 11. Known limits and things to verify in the prototype
 
-- **Same `session_id` in sub-agents?** The documentation does not say. Verify before tying state to it; otherwise tie it to the process ID, as playbook does.
+- ~~Same `session_id` in sub-agents?~~ Verified: a sub-agent's tool calls carry the main session's `session_id`, plus `agent_id` and `agent_type`, so sub-agents find the active task directly.
+- **Debugging hooks:** set `CPLUGIN_HOOK_LOG=<file>` before starting Claude Code and every hook payload and reply is appended to that file.
 - ~~The exact form of `agent_type`~~ Confirmed in the documentation: `cplugin:worker`, `cplugin:tester`.
 - **`CLAUDE_PLUGIN_ROOT` does not exist in the model's Bash commands.** It is substituted only in skill text and in hooks. That is why the project gets launchers in `.claude/bin/`, rewritten at every session start (the path changes on upgrade).
 - **Plugin agents ignore `hooks` and `permissionMode` in their frontmatter.** All enforcement goes through `hooks/hooks.json`, which was the plan anyway.
@@ -368,7 +371,7 @@ Each milestone comes with tests and is usable on its own.
 
 1. ✅ **Skeleton** (2026-10-21). Manifest, marketplace, `init`, templates, SessionStart loading `MIND_MAP.md`, `/cplugin:mindmap`. 28 tests; also verified with `claude -p --plugin-dir`.
 2. ✅ **Tasks** (2026-10-21). The `tasks` CLI (new/work/stop/done/status/list/pause) + PreToolUse (no task, manual creation, 3+ checks, check without an outcome) + PostToolUse (current gate + questions) + Stop + SessionEnd. Tests first (Red/Green) in the template. 86 tests; verified with `claude -p`: a full task worked end to end, the no-task block and the open-gates Stop block. `plan-review` and `impl-review` only print a notice until milestone 5.
-3. **Agents and roles.** `agents/worker.md`, `tester.md`, role rules in PreToolUse, the Bash check, SubagentStart/Stop, `config.toml` + `tasks config check`.
+3. ✅ **Agents and roles** (2026-10-21). `agents/worker.md`, `tester.md`, the `cplugin:workflow` skill, role rules in PreToolUse, the Bash check with a Violations section in task.md, SubagentStart/Stop with a per-agent record (the board's data), Stop waiting for running sub-agents, `tasks config show|check`. 112 tests; verified with `claude -p`: MAIN delegated tests and code to the two sub-agents, Red caught tests failing for the wrong reason, and the task closed with every file written by its owner. `max_parallel` is advice in the skill, not enforced yet.
 4. **Board.** `board.json` + `board --watch` + `/cplugin:board`.
 5. **Judges.** Codex and agy adapters, read-only sandbox, TAMPER, panel, Claude fallback.
 6. **Freehand and sandbox.**
