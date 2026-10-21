@@ -1,0 +1,11 @@
+{
+  "name": "cplugin",
+  "version": "0.1.0",
+  "description": "Task-gated, multi-agent workflow for Claude Code: two-level project memory, strict agent roles, cross-provider judges.",
+  "author": {
+    "name": "Serban-Ciprian Toma",
+    "email": "serbantoma@gmail.com"
+  },
+  "homepage": "https://github.com/serbancipriantoma/cplugin",
+  "repository": "https://github.com/serbancipriantoma/cplugin"
+}

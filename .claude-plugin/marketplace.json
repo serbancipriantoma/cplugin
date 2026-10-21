@@ -1,0 +1,14 @@
+{
+  "name": "cplugin-marketplace",
+  "description": "Marketplace for the cplugin plugin.",
+  "owner": {
+    "name": "Serban-Ciprian Toma"
+  },
+  "plugins": [
+    {
+      "name": "cplugin",
+      "source": "./",
+      "description": "Task-gated, multi-agent workflow for Claude Code: two-level project memory, strict agent roles, cross-provider judges."
+    }
+  ]
+}
