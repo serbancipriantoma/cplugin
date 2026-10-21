@@ -247,11 +247,14 @@ debug_patterns = ["print(", "console.log(", "debugger", "breakpoint()"]
 
 ## 5. Judges
 
-- `tasks plan-review <N>` or `tasks impl-review <N>`, run by MAIN, starts them.
-- Each judge gets `task.md` (without the triage), `MIND_MAP.md`, the module's detail file and read access to the repository. For impl-review it also gets the task's diff. It never gets the conversation.
-- They run **read-only**: Codex in its own read-only sandbox, any other CLI under `sandbox-exec` (macOS) with a profile that forbids writing to the project. On top of that, the CLI runs a tamper check: it compares `git status` and the hash of `task.md` before and after. If a judge changed anything, its report is marked TAMPER and not used, and the command exits with an error (an idea taken from playbook).
-- Each judge's report goes to `judges/<stage>-<provider>.md`, and the summary into `task.md`. The CLI writes them, not the judge.
-- The Codex and Antigravity adapters start from playbook's (`provider/adapters/codex.py`, `antigravity.py`). The development machine has `codex` 0.156.1 and `agy` 1.2.9.
+- `tasks plan-review <N>` or `tasks impl-review <N>`, run by MAIN in the background (they take minutes), starts them. `--seat codex|agy|claude[:model]` replaces the configured seats for one run; `--timeout-min` overrides `judges.timeout_min` (default 8, under the 10 minutes a Claude Code command may run).
+- `judges.mode = "panel"` runs every configured seat in parallel; `"single"` the first one installed. Seats whose CLI is not on PATH are skipped with a note. When none is left, `fallback = "claude"` runs `claude -p` limited to Read, Grep and Glob; `"none"` fails.
+- Each judge gets one prompt (`templates/judge-prompt.md`): what to look for at that stage, the answer format (Verdict: ACCEPT / ACCEPT WITH CHANGES / REJECT, then numbered findings with severity and file:line), `task.md` without its review sections (earlier findings and their triage would anchor it), `MIND_MAP.md`, the detail files the task names, and read access to the repository. For impl-review it also gets the diff since the task started (`tasks new` records the base commit in the task's `meta.json`; committed and uncommitted changes count, new files included, `.cplugin/` excluded). It never gets the conversation.
+- How each runs: `codex exec -s read-only` (Codex's own sandbox; prompt on stdin, last message to a temp file); `agy --print` and the `claude` fallback under `sandbox-exec` with a profile that denies writes to the project and its `.git`. When `sandbox-exec` cannot apply a profile (already inside another macOS sandbox, which forbids nesting) or is missing, they run without OS protection and the command says so. Judge processes get `CPLUGIN_JUDGE=1`, so cplugin's own hooks stand down inside them.
+- On top of that, a **tamper check** compares the working tree (git status with mtimes), the hash of `task.md` and `HEAD` before and after. If anything changed, every review of that run is marked TAMPER and not used, and the command exits 1 (an idea taken from playbook). It exits 2 when every judge failed.
+- Each judge's full report goes to `judges/<stage>-<seat>-<time>.md`; a summary (verdicts, report paths, and each judge's findings) is appended to the stage's section of `task.md` as a quote, so no finding can ever pass for a gate. The CLI writes them, not the judges. MAIN then triages each finding: accepted, parked or rejected, with the reason.
+- While they run, the judges are on the board, one row per seat, and the Stop hook lets MAIN wait for them.
+- The development machine has `codex` 0.156.1 and `agy` 1.2.9 (`agy models` lists its models, Gemini and others).
 
 ## 6. Hooks
 
@@ -264,6 +267,18 @@ debug_patterns = ["print(", "console.log(", "debugger", "breakpoint()"]
 | **SubagentStop** | Records the agent as finished |
 | **Stop** | Does not let MAIN end its turn while gates are open. Exceptions: a conversational turn (no writes and fewer than 5 tool calls since the last Stop), sub-agents still running (they run in the background, and MAIN ends its turn to wait for them; verified), MAIN ran `tasks pause "<reason>"` because it needs the user (a decision, an answer, a manual check), freehand mode, or `stop_hook_active` (so it never loops) |
 | **SessionEnd** | Records that the session closed but **does not delete its state**. `claude --continue` keeps the same session ID (verified), so the active task must survive the restart. Sessions are removed only when their process is gone and they have been idle for 7 days |
+
+### Starting a session
+
+Nothing has to be typed to "start" cplugin: in a project with `.cplugin/config.toml`, the SessionStart hook loads the memory and the active task on its own. It also shows the user a short banner (a hook `systemMessage`) and puts the same lines into the main agent's context:
+
+```
+cplugin 0.1.0 · task 003 shout active, gate 7/18 · MIND_MAP.md 6,054 / 8,500 characters, 14 detail file(s) in mindmap/
+agents: worker opus · tester sonnet
+judges: codex ✓, agy ✗ not installed  (say "start" for details)
+```
+
+A judge whose CLI is not on PATH is marked ✗; with none installed, the banner names the fallback; when judges cannot be sandboxed, a warning line is added. Saying **"start"** (or `/cplugin:start`), as in playbook, runs `tasks start`: the plugin's location, each role's model and agent file, each judge seat with the path of its CLI and its model, the fallback, the containment available, the memory, the active and open tasks and the test command. Claude then points out only what needs attention and asks what to work on, without picking a task itself.
 
 Principles, learned from playbook's problems:
 
@@ -306,10 +321,9 @@ cplugin/
 │   └── marketplace.json        # marketplace manifest, for installing
 ├── agents/
 │   ├── worker.md
-│   ├── tester.md
-│   └── judge.md                # Claude fallback, Read/Grep/Glob only
+│   └── tester.md               # judges are external CLIs, not agents (section 5)
 ├── skills/                     # /cplugin:<name>. Skills, not commands/ (the current recommendation)
-│   ├── init/  mindmap/  freehand/  board/
+│   ├── init/  start/  mindmap/  freehand/  board/
 │   └── workflow/SKILL.md       # how MAIN coordinates a task
 ├── hooks/
 │   ├── hooks.json
@@ -376,5 +390,5 @@ Each milestone comes with tests and is usable on its own.
 2. ✅ **Tasks** (2026-10-21). The `tasks` CLI (new/work/stop/done/status/list/pause) + PreToolUse (no task, manual creation, 3+ checks, check without an outcome) + PostToolUse (current gate + questions) + Stop + SessionEnd. Tests first (Red/Green) in the template. 86 tests; verified with `claude -p`: a full task worked end to end, the no-task block and the open-gates Stop block. `plan-review` and `impl-review` only print a notice until milestone 5.
 3. ✅ **Agents and roles** (2026-10-21). `agents/worker.md`, `tester.md`, the `cplugin:workflow` skill, role rules in PreToolUse, the Bash check with a Violations section in task.md, SubagentStart/Stop with a per-agent record (the board's data), Stop waiting for running sub-agents, `tasks config show|check`. 112 tests; verified with `claude -p`: MAIN delegated tests and code to the two sub-agents, Red caught tests failing for the wrong reason, and the task closed with every file written by its owner. `max_parallel` is advice in the skill, not enforced yet.
 4. ✅ **Board** (2026-10-21). `.claude/bin/board` (once, or `--watch`), `/cplugin:board`, reading the per-agent records. 128 tests; verified live: frames captured every 3 seconds during a `claude -p` run showed MAIN creating the task, waiting for the tester, running Red, then waiting for the worker, and the task closing.
-5. **Judges.** Codex and agy adapters, read-only sandbox, TAMPER, panel, Claude fallback.
+5. ✅ **Judges** (2026-10-22). Codex and agy seats, read-only containment, the tamper check, panel and single modes, the `claude -p` fallback, reports and quoted summaries, judges on the board. 142 tests, with stand-in CLIs (a guard makes the real ones unreachable from tests); verified with the real CLIs: on a plan with a planted mistake (a CommonJS interface in an ES-module project), Codex and Antigravity both flagged it as high, with file:line evidence, and found two real gaps besides, in 39 seconds in parallel.
 6. **Freehand and sandbox.**

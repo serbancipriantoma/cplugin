@@ -28,6 +28,13 @@ class TempDirCase(unittest.TestCase):
         self.config_dir.mkdir()
         self.project_dir = self.tmp / "proj"
         self.project_dir.mkdir()
+        # Shadow the judge CLIs so no test can ever start a real (billed) review.
+        self.guard_bin = self.tmp / "guard-bin"
+        self.guard_bin.mkdir()
+        for name in ("codex", "agy", "claude"):
+            guard = self.guard_bin / name
+            guard.write_text("#!/bin/sh\necho 'real judge CLI called from a test' >&2\nexit 99\n")
+            guard.chmod(0o755)
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -36,6 +43,7 @@ class TempDirCase(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE_", "CPLUGIN_"))}
         env["CLAUDE_CONFIG_DIR"] = str(self.config_dir)
         env["CPLUGIN_AGENT_PID"] = "none"
+        env["PATH"] = f"{self.guard_bin}{os.pathsep}{env.get('PATH', '')}"
         env.update(extra)
         return env
 
@@ -53,12 +61,13 @@ class TempDirCase(unittest.TestCase):
         return json.loads(result.stdout) if result.stdout.strip() else None
 
     def run_tasks(self, *args: str, cwd: Path | None = None, stdin: str | None = None,
-                  session: str | None = SESSION) -> subprocess.CompletedProcess:
+                  session: str | None = SESSION, extra_env: dict[str, str] | None = None,
+                  timeout: float = 30) -> subprocess.CompletedProcess:
         extra = {"CPLUGIN_SESSION_ID": session} if session else {}
         return subprocess.run(
             [sys.executable, "-I", str(PLUGIN_ROOT / "bin" / "tasks.py"), *args],
-            capture_output=True, text=True, env=self.env(**extra), input=stdin,
-            cwd=cwd or self.project_dir, timeout=30,
+            capture_output=True, text=True, env=self.env(**extra, **(extra_env or {})), input=stdin,
+            cwd=cwd or self.project_dir, timeout=timeout,
         )
 
     def tasks_ok(self, *args: str, **kwargs) -> str:

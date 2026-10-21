@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .. import mindmap, session, status, wrappers
+from .. import config, environment, judges, mindmap, session, status, wrappers
 from ..project import Project, find_project_root
 
 
@@ -55,10 +55,15 @@ def handle(payload: dict, plugin_root: Path) -> dict | None:
     except OSError as exc:
         warnings.append(f"could not write .claude/bin launchers: {exc}")
 
-    summary = status.task_summary(project, status.active_task(project, session_id))
+    task = status.active_task(project, session_id)
+    cfg = config.load_or_defaults(project, warnings)
+    banner = environment.banner(project, cfg, task, judges.seatbelt_status())
+    # The banner goes to the user (systemMessage) and, for the main agent, into the context.
+    summary = f"{status.task_summary(project, task)}\n\nThis session, as shown to the user:\n{banner}"
     return {
+        "systemMessage": banner,
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": mindmap.session_context(project, warnings, summary),
-        }
+        },
     }

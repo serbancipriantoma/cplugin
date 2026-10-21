@@ -16,7 +16,11 @@ A Claude Code plugin for task-gated, multi-agent work on a codebase:
 - **A live board.** Run `.claude/bin/board --watch` in a second terminal to see the active
   task, its current gate, and what the main agent, the worker and the tester are doing.
   `/cplugin:board` prints it once in the chat.
-- **Judges** from other providers (planned): Codex and Antigravity review plans and code.
+- **Judges from other providers.** `tasks plan-review` and `tasks impl-review` have Codex
+  and Antigravity (or a read-only Claude when neither is installed) review the plan and
+  the code. They never see the conversation, run read-only, and a tamper check voids any
+  review during which the project changed. Their findings are quoted into the task for
+  the main agent to triage.
 
 The `tasks` CLI (`.claude/bin/tasks` in a project): `new`, `work`, `status`, `list`,
 `pause`, `stop`, `done`, `config show|check`.
@@ -40,12 +44,17 @@ Or, to try a local checkout without installing it:
 claude --plugin-dir /path/to/cplugin
 ```
 
-Then, in the project you want to manage:
+Then, in the project you want to manage (once):
 
 ```
 /cplugin:init       set up .cplugin/, MIND_MAP.md, the CLAUDE.md block and .claude/bin/tasks
 /cplugin:mindmap    build or refresh the project memory
 ```
+
+After that there is nothing to start by hand: whenever Claude Code opens in the project, the
+memory and the active task load on their own, and a short banner shows the agents' models and
+which judge CLIs are installed. Say "start" (or `/cplugin:start`) for the full picture: where
+everything is loaded from, the open tasks, what needs attention.
 
 ## Development
 

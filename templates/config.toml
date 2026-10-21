@@ -35,12 +35,12 @@ paths = ["MIND_MAP.md", "mindmap/**"]
 
 [judges]
 mode = "panel"          # single = first available seat; panel = every seat, in parallel
-timeout_min = 15
-fallback = "claude"     # when no external CLI works: read-only Claude judge; "none" = fail
+timeout_min = 8         # per judge; keep it under 10, the longest a Claude Code command may run
+fallback = "claude"     # when no judge CLI is on PATH: `claude -p` limited to Read/Grep/Glob; "none" = fail
 
 [[judges.seat]]
 provider = "codex"
-model = ""              # empty = the CLI's default model
+model = ""              # empty = the CLI's default; `agy models` lists agy's
 
 [[judges.seat]]
 provider = "agy"

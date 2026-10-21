@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import VERSION, config, gates, mindmap, session
+from . import VERSION, config, environment, gates, judges, mindmap, session
 from .init import init_project
 from .project import Project, find_project_root
 from .status import active_task as _active, task_summary, where as _where
@@ -160,9 +160,24 @@ def _cmd_pause(args: argparse.Namespace, plugin_root: Path) -> int:
 
 
 def _cmd_review(args: argparse.Namespace, plugin_root: Path) -> int:
-    _task(_project(), args.number)
-    print(f"Judges are not available yet (they arrive in milestone 5). Write "
-          f"\"skipped: judges not available yet\" on this gate and on its triage gate, then go on.")
+    project = _project()
+    task = _task(project, args.number)
+    stage = "plan" if args.command == "plan-review" else "impl"
+    session_id = session.resolve_cli_session(project)
+    directory = session.session_dir(project, session_id) if session_id else None
+    print(f"Running the judges on task {task.label} ({args.command}); this can take several minutes…",
+          flush=True)
+    outcome = judges.review(project, task, stage, config.load(project), plugin_root, directory,
+                            seat_overrides=args.seat, timeout_min=args.timeout_min)
+    print(judges.console_summary(project, task, stage, outcome))
+    return outcome.exit_code
+
+
+def _cmd_start(args: argparse.Namespace, plugin_root: Path) -> int:
+    project = _project()
+    cfg = config.load(project)
+    print(environment.report(project, cfg, plugin_root, session.resolve_cli_session(project),
+                             judges.seatbelt_status()))
     return 0
 
 
@@ -177,7 +192,7 @@ def _cmd_config(args: argparse.Namespace, plugin_root: Path) -> int:
         for role in ("worker", "tester"):
             section = roles_cfg[role]
             print(f"{role}: model {section.get('model')} · paths {', '.join(section.get('paths', []))}")
-        seats = [str(s.get("provider")) for s in cfg["judges"].get("seat", []) if isinstance(s, dict)]
+        seats = [f"{s.provider} {'✓' if s.path else '✗ not installed'}" for s in environment.seat_status(cfg)]
         print(f"judges: {cfg['judges'].get('mode')} · {', '.join(seats) or '(no seats)'}")
         return 0
     problems = config.check(cfg)
@@ -244,13 +259,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("reason", nargs="+")
     p.set_defaults(func=_cmd_pause)
 
+    p = sub.add_parser("start", help="what this session can use: models, judges, memory, tasks")
+    p.set_defaults(func=_cmd_start)
+
     p = sub.add_parser("config", help="show the effective configuration, or check it")
     p.add_argument("action", choices=("show", "check"))
     p.set_defaults(func=_cmd_config)
 
-    for name in ("plan-review", "impl-review"):
-        p = sub.add_parser(name, help="run the judges (milestone 5)")
+    for name, what in (("plan-review", "the plan"), ("impl-review", "the code")):
+        p = sub.add_parser(name, help=f"have the judges review {what} of a task")
         p.add_argument("number")
+        p.add_argument("--seat", action="append",
+                       help="judge to use instead of the configured ones: codex, agy or claude, "
+                            "optionally with :model (repeatable)")
+        p.add_argument("--timeout-min", type=float, help="minutes before a judge is stopped")
         p.set_defaults(func=_cmd_review)
 
     p = sub.add_parser("init", help="set up or upgrade the current directory as a cplugin project")
@@ -270,6 +292,6 @@ def main(argv: list[str], plugin_root: Path) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args, plugin_root)
-    except (CliError, TaskError, config.ConfigError) as exc:
+    except (CliError, TaskError, config.ConfigError, judges.JudgeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

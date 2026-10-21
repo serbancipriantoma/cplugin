@@ -5,11 +5,10 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import wrappers
+from . import gitutil, wrappers
 from .fsutil import write_atomic, write_if_changed
 from .project import Project
 
@@ -77,15 +76,6 @@ def merge_settings(settings: dict, installed: list[str]) -> dict:
     return settings
 
 
-def _is_git_repo(root: Path) -> bool:
-    try:
-        out = subprocess.run(["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
-                             capture_output=True, text=True, timeout=5)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return out.returncode == 0 and out.stdout.strip() == "true"
-
-
 def _rel(project: Project, path: Path) -> str:
     return str(path.relative_to(project.root))
 
@@ -98,6 +88,8 @@ CONFIG_UPGRADES = [
     ("roles.tester", "paths", '["tests/**", "**/test_*.py", "**/*_test.*", "**/*.test.*", "**/*.spec.*"]',
      'paths = ["tests/**", "test/**", "**/__tests__/**", "**/test_*.py", "**/*_test.*",\n'
      '         "**/*.test.*", "**/*.spec.*"]'),
+    ("judges", "timeout_min", "15",
+     "timeout_min = 8         # per judge; keep it under 10, the longest a Claude Code command may run"),
 ]
 
 
@@ -174,7 +166,7 @@ def init_project(root: Path, plugin_root: Path, name: str | None = None) -> Repo
     for launcher, outcome in wrappers.ensure_launchers(project, plugin_root).items():
         report.record(outcome, f".claude/bin/{launcher}")
 
-    if not _is_git_repo(project.root):
+    if not gitutil.is_repo(project.root):
         report.warnings.append(
             "not a git repository. cplugin needs git for the Bash write check, the "
             "impl-review diff and the judge tamper guard. Run `git init`."

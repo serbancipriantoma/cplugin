@@ -12,10 +12,10 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 from pathlib import Path
 
 from .fsutil import write_atomic
+from .gitutil import git
 
 SNAPSHOT_DIR = "bash"
 WRITES_LOG = "writes.log"
@@ -25,20 +25,12 @@ _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 Snapshot = dict[str, list[int]]
 
 
-def _git(root: Path, *args: str) -> bytes | None:
-    try:
-        out = subprocess.run(["git", "-C", str(root), *args], capture_output=True, timeout=10)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return out.stdout if out.returncode == 0 else None
-
-
 def take(root: Path) -> Snapshot | None:
     """{path: [mtime_ns, size]} for every path under `root` that git reports as
     changed or new, relative to `root`; [-1, -1] for deleted ones. None outside
     a git repository."""
-    top = _git(root, "rev-parse", "--show-toplevel")
-    status = _git(root, "status", "--porcelain=v1", "-z", "-uall", "--", ".")
+    top = git(root, "rev-parse", "--show-toplevel")
+    status = git(root, "status", "--porcelain=v1", "-z", "-uall", "--", ".")
     if top is None or status is None:
         return None
     # git reports paths from the repository root, which may sit above the project.

@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import gates
+from . import gates, gitutil
 from .fsutil import write_atomic
 from .project import MINDMAP_DIR, Project
 
 TASK_TYPES = ("feature", "bugfix", "refactor", "explore", "test", "docs")
 STATUSES = ("pending", "active", "paused", "done")
 TASK_FILE = "task.md"
+META_FILE = "meta.json"
 MAX_SLUG = 48
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -144,25 +147,43 @@ def create(project: Project, plugin_root: Path, task_type: str, slug: str,
     directory = project.tasks_dir / f"{num:03d}-{task_type}-{slug}"
     directory.mkdir(parents=True, exist_ok=False)
     write_atomic(directory / TASK_FILE, text)
+    # The commit the task starts from: impl-review diffs the work against it.
+    meta = {"base": gitutil.head(project.root), "created_at": time.time()}
+    write_atomic(directory / META_FILE, json.dumps(meta, indent=2) + "\n")
     return Task(num, task_type, slug, directory), warnings
+
+
+def read_meta(task: Task) -> dict:
+    try:
+        meta = json.loads((task.dir / META_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return meta if isinstance(meta, dict) else {}
 
 
 VIOLATIONS_HEADING = "## Violations"
 
 
+def append_to_section(task: Task, heading_prefix: str, block: str, create: str | None = None) -> None:
+    """Append `block` at the end of the first section whose heading starts with
+    `heading_prefix`. Without one, add the `create` heading at the end, or raise."""
+    text = task.text()
+    match = re.search(rf"^{re.escape(heading_prefix)}[^\n]*\n", text, re.MULTILINE)
+    if match is None:
+        if create is None:
+            raise TaskError(f"{task.path.name} has no section starting with {heading_prefix!r}")
+        text = text.rstrip("\n") + f"\n\n{create}\n{block}"
+    else:
+        following = text.find("\n## ", match.end() - 1)
+        end = len(text) if following == -1 else following + 1
+        head, tail = text[:end].rstrip("\n") + "\n", text[end:]
+        text = head + block + ("\n" + tail if tail else "")
+    write_atomic(task.path, text)
+
+
 def record_violation(task: Task, line: str) -> None:
     """Append `- <line>` to the Violations section, creating it at the end if needed."""
-    text = task.text()
-    entry = f"- {line}\n"
-    start = text.find(f"\n{VIOLATIONS_HEADING}\n")
-    if start == -1:
-        text = text.rstrip("\n") + f"\n\n{VIOLATIONS_HEADING}\n{entry}"
-    else:
-        following = text.find("\n## ", start + 1)
-        insert_at = len(text) if following == -1 else following + 1
-        before = text[:insert_at].rstrip("\n") + "\n"
-        text = before + entry + ("\n" + text[insert_at:] if following != -1 else "")
-    write_atomic(task.path, text)
+    append_to_section(task, VIOLATIONS_HEADING, f"- {line}\n", create=VIOLATIONS_HEADING)
 
 
 def work_plan_gates(task: Task) -> list[gates.Gate]:

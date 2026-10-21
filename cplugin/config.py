@@ -35,11 +35,11 @@ DEFAULTS: dict = {
                                                 "**/test_*.py", "**/*_test.*", "**/*.test.*",
                                                 "**/*.spec.*"]},
     },
-    "judges": {"mode": "panel", "timeout_min": 15, "fallback": "claude", "seat": []},
+    "judges": {"mode": "panel", "timeout_min": 8, "fallback": "claude", "seat": []},
 }
 
 MODEL_ALIASES = ("opus", "sonnet", "haiku", "fable")
-JUDGE_COMMANDS = {"codex": "codex", "agy": "agy", "antigravity": "agy"}
+JUDGE_COMMANDS = {"codex": "codex", "agy": "agy", "antigravity": "agy", "claude": "claude"}
 
 
 class ConfigError(Exception):
@@ -116,7 +116,7 @@ def check(cfg: dict) -> list[tuple[str, str]]:
         provider = str(seat.get("provider", "")) if isinstance(seat, dict) else ""
         executable = JUDGE_COMMANDS.get(provider)
         if executable is None:
-            found.append(("WARNING", f"judge provider {provider!r} is not supported (use codex or agy)"))
+            found.append(("WARNING", f"judge provider {provider!r} is not supported (use codex, agy or claude)"))
         elif shutil.which(executable) is None:
             found.append(("WARNING", f"judge provider {provider!r}: `{executable}` is not on PATH"))
     return found

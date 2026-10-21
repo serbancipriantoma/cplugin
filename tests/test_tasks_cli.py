@@ -115,11 +115,6 @@ class LifecycleTest(ProjectCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("cannot tell which Claude Code session", result.stderr)
 
-    def test_review_is_a_placeholder_until_milestone_5(self):
-        self.new_task()
-        self.assertIn("Judges are not available yet", self.tasks_ok("plan-review", "1"))
-        self.assertEqual(self.run_tasks("plan-review", "9").returncode, 1)
-
     def test_context_includes_the_active_task(self):
         self.new_task()
         self.activate()

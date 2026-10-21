@@ -29,6 +29,8 @@ def _log(event: str, payload: object, result: object) -> None:
 
 def main(argv: list[str]) -> int:
     event = argv[1] if len(argv) > 1 else ""
+    if os.environ.get("CPLUGIN_JUDGE"):
+        return 0  # a judge's own Claude session: no workflow to enforce there
     if sys.version_info < (3, 11):
         print(f"cplugin: needs Python 3.11+, found {sys.version.split()[0]}; hook {event} skipped",
               file=sys.stderr)

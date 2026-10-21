@@ -130,7 +130,10 @@ def collect(project: Project, session_id: str | None, now: float | None = None) 
     for record in running:
         if record.get("role") == roles.OTHER:
             rows.append(_agent_row(record, project, now, str(record.get("agent_type") or "agent")))
-    rows.append(Row("judge", False, "—"))
+    judges = [r for r in subagents if r.get("role") == "judge"
+              and (agents.is_running(r, now) or now - (r.get("ended_at") or 0) < RECENT_DONE_SECONDS)]
+    rows += [_agent_row(r, project, now, str(r.get("agent_type") or "judge"))
+             for r in sorted(judges, key=lambda r: r.get("key", ""))] or [Row("judge", False, "—")]
     return Board(title, subtitle, rows)
 
 

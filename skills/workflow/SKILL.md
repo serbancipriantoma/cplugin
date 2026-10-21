@@ -65,6 +65,23 @@ Sub-agents run in the background. You may end your turn while they work: the Sto
 allows it as long as one is running, and their report arrives as a notification. Do not
 check their gates before their report is in.
 
+## Plan and implementation reviews
+
+`.claude/bin/tasks plan-review <N>` and `impl-review <N>` run the judges configured in
+`.cplugin/config.toml` (Codex, Antigravity; a read-only Claude when neither is installed).
+They read the task and the repository, never your conversation, and cannot write.
+
+- They take minutes. Run the command in the background and wait for its notification.
+- When it finishes, re-read task.md: each judge's verdict and findings are quoted at the end
+  of the review section, and the full reports are in the task's `judges/` folder.
+- Triage every finding on the triage gate: **accepted** (and change the plan, or have the
+  worker or tester fix it), **parked** (move it to Parked with enough context), or
+  **rejected** (say why, with evidence). Judges can be wrong; you check their file:line claims.
+- **TAMPER** means the project changed while the judges ran. The reviews were not used:
+  look at `git diff`, undo what should not be there, and run the review again.
+- If every judge fails, the command says why. Fix it if you can, otherwise ask the user
+  with `tasks pause`.
+
 ## If the hooks object
 
 - **A role violation** (a sub-agent changed a file it does not own, through Bash): it is

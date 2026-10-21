@@ -24,8 +24,8 @@ pending
 - [ ] Wrote the Work Plan: one group per step, each with criteria, interface and how it is verified
 
 ## 2. Plan Review
-- [ ] Run `.claude/bin/tasks plan-review {{n}}` and wait for it to finish
-- [ ] Triage: every finding → accepted / parked / rejected, with the reason
+- [ ] Run `.claude/bin/tasks plan-review {{n}}` (it takes minutes: run it in the background and wait for it); its findings are quoted below this section's gates
+- [ ] Triage: every finding → accepted / parked / rejected, with the reason; edit the Work Plan for the accepted ones
 
 ## 3. Work Plan
 <!--
@@ -36,8 +36,8 @@ automatically (graphics, animation, feel) use the manual shape.
 -->
 
 ## 4. Implementation Review
-- [ ] Run `.claude/bin/tasks impl-review {{n}}` and wait for it to finish
-- [ ] Triage: every finding → accepted / parked / rejected, with the reason
+- [ ] Run `.claude/bin/tasks impl-review {{n}}` (it takes minutes: run it in the background and wait for it); its findings are quoted below this section's gates
+- [ ] Triage: every finding → accepted / parked / rejected, with the reason; have the worker or tester fix the accepted ones
 
 ## 5. Final Review
 - [ ] All tests pass (command + count)

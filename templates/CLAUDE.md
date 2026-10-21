@@ -1,7 +1,8 @@
 <!-- cplugin:begin — managed by /cplugin:init; edits inside this block are overwritten -->
 ## cplugin workflow
 
-This project uses the cplugin workflow.
+This project uses the cplugin workflow. When the user says "start", use the
+`cplugin:start` skill: it shows what this session can use, then asks what to work on.
 
 - **Project memory.** `MIND_MAP.md` holds the big ideas and is loaded at session
   start. Each module has a detail file, `mindmap/<module>.md`, linked from its
