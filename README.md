@@ -13,6 +13,9 @@ A Claude Code plugin for task-gated, multi-agent work on a codebase:
   For each step it starts `cplugin:tester` to write the tests from the criteria, then
   `cplugin:worker` to write the code. Hooks let each role write only what it owns, and
   files changed through Bash by the wrong role are caught and recorded in the task.
+- **A live board.** Run `.claude/bin/board --watch` in a second terminal to see the active
+  task, its current gate, and what the main agent, the worker and the tester are doing.
+  `/cplugin:board` prints it once in the chat.
 - **Judges** from other providers (planned): Codex and Antigravity review plans and code.
 
 The `tasks` CLI (`.claude/bin/tasks` in a project): `new`, `work`, `status`, `list`,

@@ -186,7 +186,7 @@ def _last_activity(directory: Path) -> float:
     return max(times)
 
 
-def _session_dirs(project: Project) -> list[Path]:
+def session_dirs(project: Project) -> list[Path]:
     if not project.sessions_dir.is_dir():
         return []
     # Never follow symlinks: rmtree through a link would destroy its target.
@@ -197,7 +197,7 @@ def gc_dead_sessions(project: Project, keep: str | None) -> list[str]:
     """Remove sessions whose owner is gone and that have been idle for a week."""
     removed: list[str] = []
     now = time.time()
-    for entry in _session_dirs(project):
+    for entry in session_dirs(project):
         if entry.name == keep:
             continue
         meta = read_meta(entry)
@@ -232,7 +232,7 @@ def inherit_from_same_process(project: Project, session_id: str, agent_pid: int 
     if active_task(read_state(own)):
         return None
     candidates = []
-    for entry in _session_dirs(project):
+    for entry in session_dirs(project):
         if entry.name == session_id:
             continue
         meta = read_meta(entry)
@@ -258,7 +258,7 @@ def resolve_cli_session(project: Project) -> str | None:
     if agent_pid is None:
         return None
     best: tuple[float, str] | None = None
-    for entry in _session_dirs(project):
+    for entry in session_dirs(project):
         meta = read_meta(entry)
         if _same_process(meta, agent_pid):
             seen = meta.get("last_seen_at") or 0
@@ -269,7 +269,7 @@ def resolve_cli_session(project: Project) -> str | None:
 
 def live_sessions_with_task(project: Project, task: int, exclude: str | None = None) -> list[str]:
     found = []
-    for entry in _session_dirs(project):
+    for entry in session_dirs(project):
         if entry.name == exclude:
             continue
         meta = read_meta(entry)

@@ -66,19 +66,26 @@ def record_stop(session_dir: Path, key: str) -> None:
         _write(session_dir, key, record)
 
 
-def running_subagents(session_dir: Path) -> list[dict]:
+def all_records(session_dir: Path) -> list[dict]:
     directory = session_dir / AGENTS_DIR
     if not directory.is_dir():
         return []
-    now, found = time.time(), []
-    for path in directory.glob("*.json"):
-        if path.stem == MAIN_KEY:
-            continue
-        record = read(session_dir, path.stem)
-        last = max(record.get("started_at", 0), (record.get("last_action") or {}).get("at", 0))
-        if record.get("status") == "running" and now - last < STALE_AFTER_SECONDS:
-            found.append(record)
-    return found
+    records = (read(session_dir, path.stem) for path in sorted(directory.glob("*.json")))
+    return [r for r in records if r]
+
+
+def last_activity(record: dict) -> float:
+    return max(record.get("started_at", 0), (record.get("last_action") or {}).get("at", 0))
+
+
+def is_running(record: dict, now: float) -> bool:
+    return (record.get("key") != MAIN_KEY and record.get("status") == "running"
+            and now - last_activity(record) < STALE_AFTER_SECONDS)
+
+
+def running_subagents(session_dir: Path) -> list[dict]:
+    now = time.time()
+    return [r for r in all_records(session_dir) if is_running(r, now)]
 
 
 def action_target(payload: dict) -> str:

@@ -13,7 +13,8 @@ class InitTest(TempDirCase):
         p = self.project_dir
         for rel in (".cplugin/config.toml", ".cplugin/.gitignore", ".cplugin/tasks",
                     ".cplugin/sessions", "mindmap", "MIND_MAP.md", "CLAUDE.md",
-                    ".claude/settings.json", ".claude/bin/tasks", ".claude/bin/.gitignore"):
+                    ".claude/settings.json", ".claude/bin/tasks", ".claude/bin/board",
+                    ".claude/bin/.gitignore"):
             self.assertTrue((p / rel).exists(), rel)
         self.assertIn("# MIND_MAP — Portfolio", (p / "MIND_MAP.md").read_text())
         self.assertTrue((p / "CLAUDE.md").read_text().startswith("# Portfolio\n"))

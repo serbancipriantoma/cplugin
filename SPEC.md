@@ -274,19 +274,22 @@ Principles, learned from playbook's problems:
 ## 7. The ASCII board
 
 ```
-┌ TASK 007 · project-filter ─ gate 9/18 ────────────────────┐
-│ Step 2: category filter                                   │
-├─────────┬───────────┬─────────────────────────────────────┤
-│ MAIN    │ ● waiting │ worker, tester                      │
-│ worker  │ ● Edit    │ src/projects/filter.ts         0:42 │
-│ tester  │ ● Write   │ tests/projects/filter.test.ts  0:38 │
-│ judge   │ ○ —       │                                     │
-└─────────┴───────────┴─────────────────────────────────────┘
+┌ TASK 007 · project-filter ─ gate 9/18 ───────────────────────┐
+│ 3. Work Plan › Step 2: category filter — Red: the tests fai… │
+├─────────┬────────────┬───────────────────────────────────────┤
+│ MAIN    │ ● waiting  │ for worker, tester                    │
+│ worker  │ ● Edit     │ src/projects/filter.ts           0:42 │
+│ tester  │ ● Bash     │ node --test tests/projects       0:38 │
+│ judge   │ ○ —        │                                       │
+└─────────┴────────────┴───────────────────────────────────────┘
 ```
 
-- The hooks (SubagentStart/Stop, PreToolUse) and the CLI (running judges, with elapsed time) write the state to `.cplugin/sessions/<id>/board.json`.
-- `.claude/bin/board --watch` runs in a second terminal and refreshes about once a second. Without arguments it shows the project's active session; `--session` picks one.
-- One row per running agent: two workers in parallel show as two rows.
+- The hooks keep one record per agent in `.cplugin/sessions/<id>/agents/<agent>.json` (MAIN is `main.json`): role, running or done, start time, last tool and its target. The board only reads them; the CLI will add the judges' rows in milestone 5.
+- `.claude/bin/board --watch` runs in a second terminal and redraws every second (`--interval` changes it). Without arguments it shows the session worth watching: a live one first, then one with an active task, then the most recent. `--session` picks one by ID or prefix.
+- The header shows the task, the gate number and the current gate; a `tasks pause` replaces the gate with what MAIN is waiting for, and freehand mode is marked.
+- MAIN shows **waiting** while sub-agents run and it has done nothing since starting them, its last tool while it is busy, and **idle** after a minute without tool calls.
+- One row per running sub-agent, with its last tool, target and running time: two workers in parallel show as two rows. A finished worker or tester stays on the board for 30 minutes as **done**; a record with no activity for 2 hours no longer counts as running. Other sub-agents (Explore, general-purpose) get a row while they run.
+- The width follows the terminal (50 to 100 columns); colors only on a terminal, never with `--no-color` or `NO_COLOR`.
 - `/cplugin:board` prints the same board once, in the chat.
 
 ## 8. Freehand and sandbox
@@ -372,6 +375,6 @@ Each milestone comes with tests and is usable on its own.
 1. ✅ **Skeleton** (2026-10-21). Manifest, marketplace, `init`, templates, SessionStart loading `MIND_MAP.md`, `/cplugin:mindmap`. 28 tests; also verified with `claude -p --plugin-dir`.
 2. ✅ **Tasks** (2026-10-21). The `tasks` CLI (new/work/stop/done/status/list/pause) + PreToolUse (no task, manual creation, 3+ checks, check without an outcome) + PostToolUse (current gate + questions) + Stop + SessionEnd. Tests first (Red/Green) in the template. 86 tests; verified with `claude -p`: a full task worked end to end, the no-task block and the open-gates Stop block. `plan-review` and `impl-review` only print a notice until milestone 5.
 3. ✅ **Agents and roles** (2026-10-21). `agents/worker.md`, `tester.md`, the `cplugin:workflow` skill, role rules in PreToolUse, the Bash check with a Violations section in task.md, SubagentStart/Stop with a per-agent record (the board's data), Stop waiting for running sub-agents, `tasks config show|check`. 112 tests; verified with `claude -p`: MAIN delegated tests and code to the two sub-agents, Red caught tests failing for the wrong reason, and the task closed with every file written by its owner. `max_parallel` is advice in the skill, not enforced yet.
-4. **Board.** `board.json` + `board --watch` + `/cplugin:board`.
+4. ✅ **Board** (2026-10-21). `.claude/bin/board` (once, or `--watch`), `/cplugin:board`, reading the per-agent records. 128 tests; verified live: frames captured every 3 seconds during a `claude -p` run showed MAIN creating the task, waiting for the tester, running Red, then waiting for the worker, and the task closing.
 5. **Judges.** Codex and agy adapters, read-only sandbox, TAMPER, panel, Claude fallback.
 6. **Freehand and sandbox.**
