@@ -1,6 +1,15 @@
 # cplugin project configuration. Commit this file.
 # Paths are glob patterns relative to the project root.
 
+[workflow]
+tests_first = true      # tests, then Red, then code, then Green; false = tests and code in parallel
+
+[files]
+# Edits to these need an active task. code_extensions replaces the built-in
+# list (web, mobile, game and general-purpose languages); extra_ adds to it.
+extra_code_extensions = []
+code_dirs = ["bin", "scripts"]   # everything in these directories counts as code, except docs and data
+
 [roles.worker]
 # Claude sub-agent that writes production code.
 model = "opus"                      # opus | sonnet | haiku | fable | full model ID
@@ -31,7 +40,7 @@ provider = "agy"
 model = ""
 
 [tests]
-command = "pytest -q"
+command = ""            # e.g. "npm test" or "pytest -q"; empty = Claude finds it from the project
 
 [review]
 debug_patterns = ["print(", "console.log(", "debugger", "breakpoint()"]

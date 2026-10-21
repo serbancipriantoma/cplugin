@@ -1,7 +1,8 @@
 """SessionStart: register the session, refresh launchers, load the project memory.
 
-Fires on startup, resume, clear and compact, so the map is back in context
-after every compaction. Outside a cplugin project it does nothing.
+Fires on startup, resume, clear and compact, so the map and the active task
+are back in context after every compaction. Outside a cplugin project it does
+nothing.
 """
 
 from __future__ import annotations
@@ -9,17 +10,15 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .. import mindmap, session, wrappers
+from .. import mindmap, session, status, wrappers
 from ..project import Project, find_project_root
-
-ENV_VAR = "CPLUGIN_SESSION_ID"
 
 
 def _export_session_id(session_id: str) -> None:
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if env_file:
         with open(env_file, "a", encoding="utf-8") as fh:
-            fh.write(f"export {ENV_VAR}={session_id}\n")
+            fh.write(f"export {session.ENV_VAR}={session_id}\n")
 
 
 def handle(payload: dict, plugin_root: Path) -> dict | None:
@@ -38,10 +37,12 @@ def handle(payload: dict, plugin_root: Path) -> dict | None:
             _export_session_id(session_id)
         except OSError as exc:
             warnings.append(f"could not write CLAUDE_ENV_FILE: {exc}")
+        agent_pid = session.find_agent_pid()
         try:
-            session.register(
-                project, session_id, str(payload.get("source") or "startup"), session.find_agent_pid()
-            )
+            session.register(project, session_id, str(payload.get("source") or "startup"), agent_pid)
+            inherited = session.inherit_from_same_process(project, session_id, agent_pid)
+            if inherited:
+                warnings.append(f"took over active task {inherited:03d} from the previous session of this process")
         except OSError as exc:
             warnings.append(f"could not record session state: {exc}")
         try:
@@ -54,9 +55,10 @@ def handle(payload: dict, plugin_root: Path) -> dict | None:
     except OSError as exc:
         warnings.append(f"could not write .claude/bin launchers: {exc}")
 
+    summary = status.task_summary(project, status.active_task(project, session_id))
     return {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
-            "additionalContext": mindmap.session_context(project, warnings),
+            "additionalContext": mindmap.session_context(project, warnings, summary),
         }
     }

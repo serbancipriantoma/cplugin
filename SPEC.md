@@ -75,7 +75,8 @@ Rezumat: MIND_MAP [2]
 - `.cplugin/tasks/<NNN>-<tip>-<nume>/task.md`, plus subfolderul `judges/` pentru rapoartele judges.
 - Se creează **doar** cu `tasks new <tip> <nume> --modul <modul>`. Hook-ul blochează crearea manuală.
 - Tipuri: `feature`, `bugfix`, `refactor`, `explore`, `test`, `docs`.
-- `tasks work <N>` activează task-ul, `tasks done` îl închide și refuză dacă mai sunt etape nebifate. `tasks list` și `tasks status` arată starea.
+- `tasks work <N>` activează task-ul, `tasks done` îl închide și refuză dacă mai sunt etape nebifate. `tasks stop` îl dezactivează fără să-l închidă. `tasks list` și `tasks status` arată starea.
+- `tasks pause "<motiv>"` îi permite lui MAIN să-și încheie tura cu etape deschise, când are nevoie de tine.
 - Starea stă pe disc, nu în conversație. De aceea task-ul supraviețuiește compactării contextului și poate fi reluat în altă sesiune.
 
 ### 3.2 Etapele
@@ -84,7 +85,7 @@ Rezumat: MIND_MAP [2]
 |---|---|---|---|
 | 1 | **Design** | MAIN | Citește detaliile modulului. Spune cu vorbele lui ce i s-a cerut, cum arată „gata” (criterii verificabile), ce intră și ce nu intră în task |
 | 2 | **Plan Review** | judges, apoi MAIN | Judges evaluează planul fără să vadă conversația și fără să poată modifica ceva. MAIN acceptă, amână sau respinge fiecare observație, cu motiv |
-| 3 | **Work Plan** | MAIN, worker, tester | Pentru fiecare pas: implementare → test → verificare (secțiunea 4.3) |
+| 3 | **Work Plan** | MAIN, tester, worker | Pentru fiecare pas: teste → teste roșii → implementare → teste verzi (secțiunea 4.3) |
 | 4 | **Implementation Review** | judges, apoi MAIN | Judges evaluează codul (diff-ul task-ului). MAIN triază observațiile la fel ca la etapa 2 |
 | 5 | **Review final** | MAIN | Testele trec, nu au rămas urme de debug, iar `mindmap/<modul>.md` (și `MIND_MAP.md`, dacă e cazul) e actualizat |
 
@@ -117,9 +118,13 @@ activ
 ## 3. Work Plan
 (câte un grup pe pas, completat la Design)
 ### Pas 1: <ce se implementează>
-- [ ] Implementare (worker): ...
+Criterii: ...
+Interfață: ...
+Verificare: teste            (sau: manual — <verificare concretă>)
 - [ ] Teste (tester): ...
-- [ ] Verificare: comanda rulată + rezultatul
+- [ ] Roșu: testele pică din motivul corect (comanda + câte pică)
+- [ ] Implementare (worker): ...
+- [ ] Verde: comanda + câte trec
 - [ ] Checkpoint: ce n-am anticipat? Planul mai e bun?
 
 ## 4. Implementation Review
@@ -165,25 +170,39 @@ Bash nu poate fi controlat pe căi înainte de execuție (`echo > x.py` trece). 
 
 ### 4.3 Un pas din Work Plan
 
+**Teste înainte de cod** (implicit, decis 2026-10-21):
+
 ```
-MAIN: Pas 3. Criterii: "POST /programari creează programarea; 409 dacă slotul e ocupat"
-  ├─► worker  primește criteriile + fișierele de cod relevante   ─┐ în paralel
-  └─► tester  primește DOAR criteriile, nu și codul nou          ─┘
-MAIN: rulează testele (tests.command din config)
-  ├─ trec → bifează Implementare + Teste + Verificare, cu rezultatul
-  └─ pică → MAIN decide cine greșește și notează motivul în task.md:
-            bug în cod     → înapoi la worker, cu eșecul
-            test greșit    → înapoi la tester, cu explicația
+MAIN: Pas 3. Criterii: "un cavaler lovește un arcaș: daună 6–9, redusă de apărare"
+      Interfață: damage(attacker, defender, rng) -> int
+  └─► tester  primește DOAR criteriile + interfața și scrie testele
+MAIN: rulează testele → trebuie să PICE (Roșu)
+  ├─ pică din motivul corect (lipsește funcționalitatea) → continuă
+  ├─ pică din alt motiv (eroare de sintaxă, import greșit) → înapoi la tester
+  └─ trec deja → nu testează nimic nou → înapoi la tester
+  └─► worker  primește criteriile + interfața + calea testelor; implementează până trec
+MAIN: rulează testele → Verde
+  └─ dacă worker-ul spune că un test e greșit: MAIN decide cine are dreptate
+     și notează motivul în task.md (test greșit → tester; cod greșit → worker)
 MAIN: Checkpoint
 ```
 
-Tester-ul lucrează **orb**: pornește în același timp cu worker-ul și primește doar criteriile, așa că testele verifică ce s-a cerut, nu ce s-a scris. Ca să nu se poată „repara” un eșec slăbind partea celuilalt, worker-ul nu poate modifica teste, iar tester-ul nu poate modifica cod.
+- Tester-ul lucrează **orb** prin construcție, pentru că codul nu există încă. Testele verifică ce s-a cerut, nu ce s-a scris.
+- **Roșu** dovedește că testele chiar testează ceva nou. În paralel nu s-ar putea verifica asta.
+- Worker-ul nu poate modifica teste, iar tester-ul nu poate modifica cod. Așa, un eșec nu se poate „repara” slăbind partea celuilalt.
+- Interfața o fixează MAIN la Design, nu tester-ul. Altfel tester-ul ar decide singur cum arată API-ul.
+- Riscul de cod scris „pentru teste”, adică exact ce trece testele și nu ce s-a cerut, îl prinde Implementation Review, unde judges compară codul cu cerința.
+- **Pașii care nu se pot testa automat** (grafică, animații, senzația de joc) au `Verificare: manual — <verificare concretă>`. În locul etapelor Teste/Roșu/Verde au o etapă „Verificare manuală”, cu rezultatul.
+- Cu `workflow.tests_first = false`, tester-ul și worker-ul pornesc în paralel, ca în varianta inițială, iar etapa Roșu dispare.
 
 ### 4.4 Configurarea: un singur fișier
 
 `.cplugin/config.toml` se commite și se poate edita de mână. A fost ales TOML pentru că acceptă comentarii și Python îl citește fără dependențe (`tomllib`).
 
 ```toml
+[workflow]
+tests_first = true                  # false = tester și worker în paralel, fără etapa Roșu
+
 [roles.worker]
 model = "opus"                      # opus | sonnet | haiku | fable | ID complet
 paths = ["src/**", "app/**"]        # unde are voie să scrie
@@ -232,13 +251,13 @@ debug_patterns = ["print(", "console.log(", "debugger", "breakpoint()"]
 
 | Eveniment | Ce face |
 |---|---|
-| **SessionStart** (`startup`, `resume`, `clear`, `compact`) | Dă sesiunii un ID (`CPLUGIN_SESSION_ID`, prin `CLAUDE_ENV_FILE`). Creează `.claude/bin/` (`tasks`, `board`, `sandbox`). Șterge sesiunile moarte, verificând dacă procesul mai trăiește, nu după vechime. **Bagă în context `MIND_MAP.md` și starea task-ului activ** (etapa curentă) |
+| **SessionStart** (`startup`, `resume`, `clear`, `compact`) | Înregistrează sesiunea (ID-ul din payload, procesul Claude care o rulează și `CPLUGIN_SESSION_ID`, prin `CLAUDE_ENV_FILE`). Creează `.claude/bin/` (`tasks`, `board`, `sandbox`). Șterge sesiunile moarte. După `/clear`, dacă ID-ul s-a schimbat, preia task-ul activ al sesiunii anterioare din același proces. **Bagă în context `MIND_MAP.md` și starea task-ului activ** (etapa curentă) |
 | **PreToolUse** (`Edit\|Write\|NotebookEdit\|Bash\|Agent`) | Blochează codul fără task activ. Impune rolurile (4.2). Blochează crearea manuală a task-urilor. Blochează bifarea a 3+ etape deodată, iar la 2 avertizează. Blochează `tasks …` rulat din sub-agenți. Notează acțiunea în tablou |
 | **PostToolUse** (toate) | Doar pentru MAIN: arată etapa curentă (`fișier:linie`) și o întrebare de verificare care depinde de ce a făcut („Is this the simplest change that works?”, „Did it pass for the right reason?”). Pentru sub-agenți face doar verificarea Bash (4.2) și actualizează tabloul |
 | **SubagentStart** | Trece agentul ca activ în tablou. Îi adaugă în context regulile rolului și pasul curent |
 | **SubagentStop** | Trece agentul ca terminat în tablou |
-| **Stop** | Nu-l lasă pe MAIN să termine cât timp sunt etape nebifate. Excepții: tura a fost doar conversație (0 scrieri și <5 tool-uri de la ultimul Stop), modul freehand, sau `stop_hook_active` (ca să nu intre în buclă) |
-| **SessionEnd** | Șterge starea sesiunii doar când procesul chiar se închide. După `/clear`, sesiunea continuă și task-ul activ trebuie păstrat |
+| **Stop** | Nu-l lasă pe MAIN să termine cât timp sunt etape nebifate. Excepții: tura a fost doar conversație (0 scrieri și <5 tool-uri de la ultimul Stop), MAIN a rulat `tasks pause "<motiv>"` pentru că are nevoie de tine (o decizie, un răspuns, o verificare manuală), modul freehand, sau `stop_hook_active` (ca să nu intre în buclă) |
+| **SessionEnd** | Notează că sesiunea s-a închis, dar **nu șterge starea**. `claude --continue` păstrează același ID de sesiune (verificat), deci task-ul activ trebuie să supraviețuiască repornirii. Sesiunile se șterg abia când procesul lor nu mai există și n-au mai fost folosite de 7 zile |
 
 Principii, preluate din problemele playbook:
 
@@ -344,7 +363,7 @@ proiect/
 Fiecare etapă vine cu teste și se poate folosi independent.
 
 1. ✅ **Schelet** (2026-10-21). Manifest, marketplace local, `init`, șabloane, SessionStart care încarcă `MIND_MAP.md`, `/cplugin:mindmap`. 28 de teste; verificat și cu `claude -p --plugin-dir`.
-2. **Task-uri.** CLI-ul `tasks` (new/work/done/status/list) + PreToolUse (fără task, creare manuală, 3+ bife) + PostToolUse (etapa curentă) + Stop + SessionEnd.
+2. ✅ **Task-uri** (2026-10-21). CLI-ul `tasks` (new/work/stop/done/status/list/pause) + PreToolUse (fără task, creare manuală, 3+ bife, bifă fără rezultat) + PostToolUse (etapa curentă + întrebări) + Stop + SessionEnd. Teste întâi (Roșu/Verde) în șablon. 86 de teste; verificat cu `claude -p`: un task complet parcurs cap-coadă, blocarea editării fără task și blocarea opririi cu etape deschise. `plan-review` și `impl-review` doar afișează un mesaj până la etapa 5.
 3. **Agenți și roluri.** `agents/worker.md`, `tester.md`, regulile de roluri în PreToolUse, verificarea Bash, SubagentStart/Stop, `config.toml` + `tasks config check`.
 4. **Tablou.** `board.json` + `board --watch` + `/cplugin:board`.
 5. **Judges.** Adaptoare Codex și agy, sandbox read-only, TAMPER, panel, rezerva Claude.

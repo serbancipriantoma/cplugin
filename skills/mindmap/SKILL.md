@@ -42,6 +42,8 @@ Wait for the answer before writing.
 
 ## 3. Write `MIND_MAP.md`
 
+- Open `MIND_MAP.md` with the Read tool first, even if you already saw it through
+  Bash: the Write tool refuses to overwrite a file this session has not Read.
 - Delete the `<!-- cplugin:stub ... -->` line.
 - `[1] Overview` first: what the project is, who uses it, the module list with node numbers.
 - One node per module, titled `## [N] <Module> → mindmap/<file>.md`, with 3-6 bullets
@@ -84,6 +86,8 @@ and link the parts from the module file.
 
 ## 5. Verify
 
+- `MIND_MAP.md` no longer contains the `<!-- cplugin:stub` line. If it does, the write
+  failed: Read the file and write it again before going on.
 - Every module node links a detail file that exists, and each detail file names its node.
 - `wc -c MIND_MAP.md` is under 8,500. If not, move detail down into `mindmap/`.
 - Show the user what the next session will load:

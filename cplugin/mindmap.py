@@ -25,8 +25,11 @@ def _clip(text: str, budget: int) -> tuple[str, bool]:
     return text[: cut if cut > 0 else budget], True
 
 
-def session_context(project: Project, warnings: list[str] | None = None) -> str:
+def session_context(project: Project, warnings: list[str] | None = None,
+                    task_summary: str | None = None) -> str:
     parts = ["# cplugin: project memory"]
+    if task_summary:
+        parts.append(task_summary)
     path = project.mind_map
     if not path.is_file():
         parts.append(
