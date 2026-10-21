@@ -55,6 +55,9 @@ _SHELL_WRITE_RE = re.compile(
     rf"(?:>>?|\btee\b(?:\s+-a)?)\s*{_STATE_PATH}"
     rf"|\b(?:sed|perl)\s+(?:-[a-zA-Z]*i\b|--in-place)[^;&|\n]*\.cplugin/(?:tasks/[^/\s]+/task\.md|sessions/)"
 )
+FREEHAND_BY_AGENT = ("Only the user turns freehand on, by typing /cplugin:freehand. If the rules are "
+                     "in the way, explain why and ask the user.")
+_FREEHAND_ON_RE = re.compile(r"(?:^|[;&|(]\s*|\s)(?:\S*/)?tasks(?:\.py)?\s+freehand\b(?!\s+off\b)")
 _TASKS_WRITE_RE = re.compile(
     r"(?:^|[;&|(]\s*|\s)(?:\S*/)?tasks\s+(new|work|stop|done|pause|plan-review|impl-review|init)\b")
 
@@ -154,6 +157,8 @@ def _check_bash(project: Project, payload: dict, role: str, state: dict,
     if _SHELL_WRITE_RE.search(command):
         return pre_tool_deny("Task files are edited with the Edit tool, one gate at a time, and "
                              "session state belongs to the `.claude/bin/tasks` CLI.")
+    if _FREEHAND_ON_RE.search(command):
+        return pre_tool_deny(FREEHAND_BY_AGENT)
     if role != roles.MAIN and (match := _TASKS_WRITE_RE.search(command)):
         return pre_tool_deny(SUBAGENT_CLI.format(sub=match.group(1)))
     if directory is not None and session.active_task(state) and not state.get("freehand"):

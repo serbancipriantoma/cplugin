@@ -109,7 +109,9 @@ def collect(project: Project, session_id: str | None, now: float | None = None) 
         title = f"TASK {task.label} · {task.slug} ─ gate {min(done + 1, total)}/{total}"
         subtitle = f"{gate.section} — {gate.text}" if gate else "every gate is checked: tasks done"
     if state.get("freehand"):
-        title += " · FREEHAND"
+        title = "FREEHAND · the user drives, rules suspended" if task is None else title + " · FREEHAND"
+        if task is None:
+            subtitle = "ends with tasks work <N> or tasks freehand off; changes are logged in .cplugin/freehand.md"
     if state.get("pause"):
         subtitle = f"waiting for the user: {state['pause']}"
 

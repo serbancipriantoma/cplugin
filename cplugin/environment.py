@@ -6,12 +6,16 @@ memory and the tasks. Shown as a short banner at session start and in full by
 
 from __future__ import annotations
 
+import os
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from . import VERSION, gates, judges, mindmap, status
 from .project import Project
+
+SANDBOX_ENV = "CPLUGIN_SANDBOX"   # set by .claude/bin/sandbox for the Claude Code it starts
 from .task import Task, list_tasks, read_status
 
 
@@ -58,14 +62,17 @@ def _memory(project: Project) -> str:
             f"{details} detail file(s) in {project.mindmap_dir.name}/")
 
 
-def _task_line(task: Task | None) -> str:
+def _task_line(task: Task | None, freehand_since: float | None = None) -> str:
+    if freehand_since is not None:
+        return f"freehand since {time.strftime('%H:%M', time.localtime(freehand_since))} (rules suspended)"
     if task is None:
         return "no active task"
     done, total = gates.progress(task.gates())
     return f"task {task.label} {task.slug} active, gate {min(done + 1, total)}/{total}"
 
 
-def banner(project: Project, cfg: dict, task: Task | None, sandbox: str) -> str:
+def banner(project: Project, cfg: dict, task: Task | None, sandbox: str,
+           freehand_since: float | None = None) -> str:
     """Two or three short lines for the user at session start."""
     seats = seat_status(cfg)
     installed = [s for s in seats if s.path]
@@ -73,7 +80,8 @@ def banner(project: Project, cfg: dict, task: Task | None, sandbox: str) -> str:
     judges_text = marks or "none configured"
     if not installed:
         judges_text += f" → {_fallback(cfg)}"
-    lines = [f"cplugin {VERSION} · {_task_line(task)} · {_memory(project)}",
+    sandboxed = " · sandboxed: writes only in the project" if os.environ.get(SANDBOX_ENV) else ""
+    lines = [f"cplugin {VERSION}{sandboxed} · {_task_line(task, freehand_since)} · {_memory(project)}",
              f"agents: worker {_role_model(cfg, 'worker')} · tester {_role_model(cfg, 'tester')}",
              f"judges: {judges_text}"]
     if installed and sandbox != "ok":

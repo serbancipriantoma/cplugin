@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from . import gates, session
 from .project import Project
 from .task import Task, find_task
@@ -24,7 +26,12 @@ def where(project: Project, task: Task) -> str:
     return f"Progress {done}/{total}. Next gate ({rel}:{gate.line}) [{gate.section}]: {gate.text}"
 
 
-def task_summary(project: Project, task: Task | None) -> str:
+def task_summary(project: Project, task: Task | None, freehand_since: float | None = None) -> str:
+    if freehand_since is not None:
+        since = time.strftime("%H:%M", time.localtime(freehand_since))
+        return (f"Freehand is on since {since}: the user drives. No task is needed for code, and roles "
+                "and turn checks are suspended. It ends with `.claude/bin/tasks work <N>` or "
+                "`.claude/bin/tasks freehand off`.")
     if task is None:
         return ("No active task. Code edits need one: `.claude/bin/tasks new <type> <name> "
                 "--module <module> --request -` (the user's request on stdin), then "

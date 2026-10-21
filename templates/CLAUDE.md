@@ -35,6 +35,8 @@ This project uses the cplugin workflow. When the user says "start", use the
   role may write only what it owns; ending a turn with open gates is blocked
   unless sub-agents are still running. When you need the user (a decision, an
   answer, a manual check), run `.claude/bin/tasks pause "<what you need>"` and ask.
+- **Freehand.** Only the user can suspend these rules, by typing `/cplugin:freehand`; you
+  cannot turn it on. It ends with `tasks work <N>` or `tasks freehand off`.
 - **Build or refresh the map** with `/cplugin:mindmap`. Configuration lives in
   `.cplugin/config.toml`.
 <!-- cplugin:end -->

@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import VERSION, config, environment, gates, judges, mindmap, session
+from . import VERSION, config, environment, freehand, gates, judges, mindmap, session
 from .init import init_project
 from .project import Project, find_project_root
 from .status import active_task as _active, task_summary, where as _where
@@ -67,6 +67,8 @@ def _cmd_work(args: argparse.Namespace, plugin_root: Path) -> int:
     if status == "done":
         raise CliError(f"task {task.label} is done. Create a new task for further work.")
     directory = session.session_dir(project, session_id)
+    if freehand.is_on(session.read_state(directory)):
+        print(freehand.stop(project, directory, session_id))
     state = session.read_state(directory)
     previous = session.active_task(state)
     if previous and previous != task.num and (old := find_task(project, previous)):
@@ -79,6 +81,29 @@ def _cmd_work(args: argparse.Namespace, plugin_root: Path) -> int:
     set_status(task, "active")
     print(f"Active task: {task.title}")
     print(_where(project, task))
+    return 0
+
+
+def _cmd_freehand(args: argparse.Namespace, plugin_root: Path) -> int:
+    project = _project()
+    session_id = _session(project)
+    directory = session.session_dir(project, session_id)
+    state = session.read_state(directory)
+    if args.action == "off":
+        print(freehand.stop(project, directory, session_id))
+        return 0
+    if freehand.is_on(state):
+        print("Freehand is already on. End it with `tasks work <N>` or `tasks freehand off`.")
+        return 0
+    paused = _active(project, session_id)
+    if paused is not None:
+        set_status(paused, "paused")
+    freehand.start(project, directory, paused.num if paused else None)
+    print("Freehand on: the user drives. Until `tasks work <N>` or `tasks freehand off`, the hooks "
+          "no longer require a task for code, enforce roles, or hold the turn open.")
+    if paused is not None:
+        print(f"Task {paused.label} is paused meanwhile.")
+    print("What changes meanwhile is logged in .cplugin/freehand.md when freehand ends.")
     return 0
 
 
@@ -121,6 +146,9 @@ def _cmd_status(args: argparse.Namespace, plugin_root: Path) -> int:
     project = _project()
     session_id = session.resolve_cli_session(project)
     task = _active(project, session_id)
+    state = session.read_state(session.session_dir(project, session_id)) if session_id else {}
+    if freehand.is_on(state):
+        print("Freehand is on: the user drives, the rules are suspended.")
     if task is None:
         print("No active task in this session.")
         return 0
@@ -254,6 +282,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("list", help="all tasks with status and progress")
     p.set_defaults(func=_cmd_list)
+
+    p = sub.add_parser("freehand", help="the user drives: suspend the rules (only the user turns it on)")
+    p.add_argument("action", nargs="?", choices=("on", "off"), default="on")
+    p.set_defaults(func=_cmd_freehand)
 
     p = sub.add_parser("pause", help="end the turn with gates open because the user is needed")
     p.add_argument("reason", nargs="+")

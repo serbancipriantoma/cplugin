@@ -22,8 +22,15 @@ A Claude Code plugin for task-gated, multi-agent work on a codebase:
   review during which the project changed. Their findings are quoted into the task for
   the main agent to triage.
 
-The `tasks` CLI (`.claude/bin/tasks` in a project): `new`, `work`, `status`, `list`,
-`pause`, `stop`, `done`, `config show|check`.
+- **Freehand.** `/cplugin:freehand` suspends the rules while you drive; only you can turn it
+  on. It ends with `tasks work <N>` or `tasks freehand off`, and what changed meanwhile is
+  logged in `.cplugin/freehand.md`.
+- **Sandbox.** `.claude/bin/sandbox` starts Claude Code without permission prompts inside
+  macOS `sandbox-exec`: it can write only in the project (not `.git`) and Claude's own state.
+  Where that containment is not possible, it refuses to start.
+
+The `tasks` CLI (`.claude/bin/tasks` in a project): `start`, `new`, `work`, `status`, `list`,
+`pause`, `stop`, `done`, `plan-review`, `impl-review`, `freehand off`, `config show|check`.
 
 The design, its decisions and the milestone plan are in [SPEC.md](SPEC.md).
 

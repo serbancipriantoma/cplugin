@@ -56,10 +56,12 @@ def handle(payload: dict, plugin_root: Path) -> dict | None:
         warnings.append(f"could not write .claude/bin launchers: {exc}")
 
     task = status.active_task(project, session_id)
+    state = session.read_state(session.session_dir(project, session_id)) if session_id else {}
+    since = (state.get("freehand") or {}).get("since")
     cfg = config.load_or_defaults(project, warnings)
-    banner = environment.banner(project, cfg, task, judges.seatbelt_status())
+    banner = environment.banner(project, cfg, task, judges.seatbelt_status(), since)
     # The banner goes to the user (systemMessage) and, for the main agent, into the context.
-    summary = f"{status.task_summary(project, task)}\n\nThis session, as shown to the user:\n{banner}"
+    summary = f"{status.task_summary(project, task, since)}\n\nThis session, as shown to the user:\n{banner}"
     return {
         "systemMessage": banner,
         "hookSpecificOutput": {
