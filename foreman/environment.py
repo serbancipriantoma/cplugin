@@ -1,7 +1,7 @@
 """What this session can use: the Claude models of the roles, which judge CLIs
 are installed and where, whether judges can be sandboxed, and the state of the
 memory and the tasks. Shown as a short banner at session start and in full by
-`tasks start` / `/cplugin:start`.
+`tasks start` / `/foreman:start`.
 """
 
 from __future__ import annotations
@@ -13,9 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import VERSION, gates, judges, mindmap, status
+from .containment import Containment
 from .project import Project
 
-SANDBOX_ENV = "CPLUGIN_SANDBOX"   # set by .claude/bin/sandbox for the Claude Code it starts
+SANDBOX_ENV = "FOREMAN_SANDBOX"   # set by .claude/bin/sandbox for the Claude Code it starts
 from .task import Task, list_tasks, read_status
 
 
@@ -52,10 +53,10 @@ def _fallback(cfg: dict) -> str:
 
 def _memory(project: Project) -> str:
     if not project.mind_map.is_file():
-        return "MIND_MAP.md is missing: run /cplugin:mindmap"
+        return "MIND_MAP.md is missing: run /foreman:mindmap"
     text = project.mind_map.read_text(encoding="utf-8", errors="replace").strip()
     if mindmap.is_stub(text):
-        return "MIND_MAP.md is still the empty template: run /cplugin:mindmap"
+        return "MIND_MAP.md is still the empty template: run /foreman:mindmap"
     details = len(list(project.mindmap_dir.glob("**/*.md"))) if project.mindmap_dir.is_dir() else 0
     over = " (over budget: compress it)" if len(text) > mindmap.MIND_MAP_BUDGET else ""
     return (f"MIND_MAP.md {len(text):,} / {mindmap.MIND_MAP_BUDGET:,} characters{over}, "
@@ -71,7 +72,7 @@ def _task_line(task: Task | None, freehand_since: float | None = None) -> str:
     return f"task {task.label} {task.slug} active, gate {min(done + 1, total)}/{total}"
 
 
-def banner(project: Project, cfg: dict, task: Task | None, sandbox: str,
+def banner(project: Project, cfg: dict, task: Task | None, found: Containment,
            freehand_since: float | None = None) -> str:
     """Two or three short lines for the user at session start."""
     seats = seat_status(cfg)
@@ -81,20 +82,21 @@ def banner(project: Project, cfg: dict, task: Task | None, sandbox: str,
     if not installed:
         judges_text += f" → {_fallback(cfg)}"
     sandboxed = " · sandboxed: writes only in the project" if os.environ.get(SANDBOX_ENV) else ""
-    lines = [f"cplugin {VERSION}{sandboxed} · {_task_line(task, freehand_since)} · {_memory(project)}",
+    lines = [f"foreman {VERSION}{sandboxed} · {_task_line(task, freehand_since)} · {_memory(project)}",
              f"agents: worker {_role_model(cfg, 'worker')} · tester {_role_model(cfg, 'tester')}",
              f"judges: {judges_text}"]
-    if installed and sandbox != "ok":
-        lines.append(f"warning: judges run without an OS sandbox here ({sandbox}); only the tamper check guards the project")
+    if any(s.path and s.provider != "codex" for s in seats) and not found.ok:
+        lines.append(f"warning: judges run without an OS sandbox here ({found.describe()}); "
+                     "only the tamper check guards the project")
     lines[-1] += "  (say \"start\" for details)"
     return "\n".join(lines)
 
 
 def report(project: Project, cfg: dict, plugin_root: Path, session_id: str | None,
-           sandbox: str) -> str:
+           found: Containment) -> str:
     """The full picture, for `tasks start`."""
     judges_cfg = cfg.get("judges", {})
-    lines = [f"cplugin {VERSION} (plugin at {plugin_root})",
+    lines = [f"foreman {VERSION} (plugin at {plugin_root})",
              f"project: {project.root.name} ({project.root})", "",
              "Agents (Claude models, used through your Claude account)",
              "  main    this session's model (the one you started Claude Code with)"]
@@ -108,13 +110,15 @@ def report(project: Project, cfg: dict, plugin_root: Path, session_id: str | Non
         where = f"✓ {seat.path}" if seat.path else "✗ not installed: this seat is skipped"
         lines.append(f"  {seat.provider:<7} {where} · {model}")
     if not seats:
-        lines.append("  (no seats in .cplugin/config.toml)")
+        lines.append("  (no seats in .foreman/config.toml)")
     lines.append(f"  fallback when none is installed: {_fallback(cfg)}")
-    lines.append("  containment: " + {
-        "ok": "sandbox-exec works here: agy and claude run with the project read-only, codex in its own read-only sandbox",
-        "nested": "inside another sandbox, sandbox-exec cannot add rules: only the tamper check guards the project",
-        "none": "no sandbox-exec on this system: only the tamper check guards the project",
-    }[sandbox])
+    if found.ok:
+        lines.append(f"  containment: {found.tool} works here: agy and claude run with the project "
+                     "read-only (only temp and their own state writable), codex in its own read-only sandbox; "
+                     ".claude/bin/sandbox can start Claude Code contained")
+    else:
+        lines.append(f"  containment: {found.describe()}. Judges get only the tamper check, "
+                     ".claude/bin/sandbox refuses to start")
 
     lines += ["", "Memory", f"  {_memory(project)}", "", "Tasks"]
     active = status.active_task(project, session_id)
@@ -130,6 +134,6 @@ def report(project: Project, cfg: dict, plugin_root: Path, session_id: str | Non
     if done_count:
         lines.append(f"  done: {done_count}")
     tests = str(cfg.get("tests", {}).get("command") or "")
-    lines += ["", f"Tests: {tests or 'tests.command is not set in .cplugin/config.toml'}",
+    lines += ["", f"Tests: {tests or 'tests.command is not set in .foreman/config.toml'}",
               "Board: run .claude/bin/board --watch in a second terminal"]
     return "\n".join(lines)

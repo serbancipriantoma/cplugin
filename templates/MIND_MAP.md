@@ -1,4 +1,4 @@
-<!-- cplugin:stub — /cplugin:mindmap removes this line when it writes the real map -->
+<!-- foreman:stub — /foreman:mindmap removes this line when it writes the real map -->
 # MIND_MAP — {project}
 
 > Project memory, level 1: the big ideas. Loaded into context at every session

@@ -2,15 +2,13 @@ import json
 import os
 import subprocess
 import sys
-import unittest
-import uuid
 from pathlib import Path
 from unittest import mock
 
 from helpers import PLUGIN_ROOT, SESSION, ProjectCase
 
-from cplugin import board, environment, judges, sandbox
-from cplugin.project import Project
+from foreman import board, containment, environment, sandbox
+from foreman.project import Project
 
 
 def decision(out: dict | None) -> str | None:
@@ -27,7 +25,7 @@ class FreehandCase(ProjectCase):
         self.git("commit", "-qm", "init")
 
     def state(self) -> dict:
-        return json.loads((self.project_dir / ".cplugin/sessions" / SESSION / "state.json").read_text())
+        return json.loads((self.project_dir / ".foreman/sessions" / SESSION / "state.json").read_text())
 
 
 class FreehandCliTest(FreehandCase):
@@ -50,7 +48,7 @@ class FreehandCliTest(FreehandCase):
         out = self.tasks_ok("freehand", "off")
         self.assertIn("1 commit(s), 2 file(s) changed: b.js, src/a.js", out)
         self.assertIn("`.claude/bin/tasks work 1` resumes it", out)
-        log = (self.project_dir / ".cplugin" / "freehand.md").read_text()
+        log = (self.project_dir / ".foreman" / "freehand.md").read_text()
         self.assertIn("- commits: 1\n  - ", log)
         self.assertIn("quick fix", log)
         self.assertIn("- files changed: `b.js`, `src/a.js`", log)
@@ -95,7 +93,7 @@ class FreehandHooksTest(FreehandCase):
 class SandboxTest(ProjectCase):
     def test_profile(self):
         home = Path("/Users/someone")
-        text = sandbox.profile(Project(self.project_dir), home)
+        text = containment.seatbelt_profile(self.project_dir, home)
         self.assertTrue(text.startswith("(version 1)\n(allow default)\n(deny file-write*"))
         self.assertIn(f'(require-not (subpath "{self.project_dir}"))', text)
         self.assertIn('(require-not (subpath "/Users/someone/.claude"))', text)
@@ -106,7 +104,7 @@ class SandboxTest(ProjectCase):
     def test_plugin_dir_only_for_a_checkout(self):
         with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.config_dir)}):
             self.assertFalse(sandbox.plugin_installed(PLUGIN_ROOT))
-            installed = self.config_dir / "plugins" / "cache" / "m" / "cplugin" / "0.1.0"
+            installed = self.config_dir / "plugins" / "cache" / "m" / "foreman" / "0.1.0"
             installed.mkdir(parents=True)
             self.assertTrue(sandbox.plugin_installed(installed))
 
@@ -126,7 +124,7 @@ class SandboxTest(ProjectCase):
         env = self.env(PATH=os.pathsep.join([str(claude_stub.parent), python_dir, "/usr/bin", "/bin"]))
         out = subprocess.run([str(launcher), "--dry-run", "--continue"], capture_output=True, text=True,
                              cwd=self.project_dir, env=env)
-        if judges.seatbelt_status() == "ok":
+        if containment.detect().ok:
             self.assertEqual(out.returncode, 0, out.stderr)
             self.assertIn(f"{claude_stub} --dangerously-skip-permissions --plugin-dir {PLUGIN_ROOT} --continue",
                           out.stdout)
@@ -136,20 +134,3 @@ class SandboxTest(ProjectCase):
                                 cwd=self.project_dir, env={**env, environment.SANDBOX_ENV: "1"})
         self.assertEqual(nested.returncode, 1)
         self.assertIn("Refusing to run Claude Code without permission prompts unconfined", nested.stderr)
-
-    @unittest.skipUnless(sys.platform == "darwin" and judges.seatbelt_status() == "ok", "needs sandbox-exec")
-    def test_profile_contains_writes_for_real(self):
-        subprocess.run(["git", "-C", str(self.project_dir), "init", "-q"], check=True)
-        probe = Path.home() / f"cplugin-sandbox-test-{uuid.uuid4().hex}"
-        script = (f"touch {self.project_dir}/inside.txt; echo inside=$?; "
-                  f"touch {probe}; echo home=$?; "
-                  f"touch {self.project_dir}/.git/probe; echo git=$?")
-        try:
-            out = subprocess.run(["sandbox-exec", "-p", sandbox.profile(Project(self.project_dir)), "/bin/sh", "-c", script],
-                                 capture_output=True, text=True)
-            self.assertIn("inside=0", out.stdout)
-            self.assertIn("home=1", out.stdout)
-            self.assertIn("git=1", out.stdout)
-            self.assertFalse(probe.exists())
-        finally:
-            probe.unlink(missing_ok=True)

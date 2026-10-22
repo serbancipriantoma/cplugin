@@ -1,10 +1,10 @@
-"""Freehand: the user drives, and cplugin's rules are suspended.
+"""Freehand: the user drives, and foreman's rules are suspended.
 
 While it is on, the hooks no longer require a task for code, enforce roles or
-hold the main agent's turn. Only the user turns it on (/cplugin:freehand runs
+hold the main agent's turn. Only the user turns it on (/foreman:freehand runs
 the CLI directly; the hook refuses `tasks freehand` from any agent). It ends
 with `tasks work <N>` or `tasks freehand off`, and what changed meanwhile, the
-commits and the files, is appended to .cplugin/freehand.md so it is not lost.
+commits and the files, is appended to .foreman/freehand.md so it is not lost.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from .fsutil import write_atomic
 from .project import Project
 
 LOG_FILE = "freehand.md"
-LOG_HEADER = "# Freehand log\n\nWhat changed while the user drove without a task (written by cplugin).\n"
+LOG_HEADER = "# Freehand log\n\nWhat changed while the user drove without a task (written by foreman).\n"
 
 
 def is_on(state: dict) -> bool:
@@ -43,7 +43,7 @@ def _changes(project: Project, record: dict) -> tuple[list[str], list[str]]:
         commits = log.decode("utf-8", "replace").splitlines()
         names = gitutil.git(project.root, "diff", "--name-only", head, current, "--", ".") or b""
         files |= set(names.decode("utf-8", "replace").splitlines())
-    return commits, sorted(f for f in files if f and not f.startswith(".cplugin/"))
+    return commits, sorted(f for f in files if f and not f.startswith(".foreman/"))
 
 
 def stop(project: Project, session_dir: Path, session_id: str) -> str:
@@ -64,7 +64,7 @@ def stop(project: Project, session_dir: Path, session_id: str) -> str:
 
     lines = [f"Freehand off. Since {since}: {len(commits)} commit(s), {len(files)} file(s) changed"
              + (f": {', '.join(files[:10])}" + (" …" if len(files) > 10 else "") if files else ".")]
-    lines.append(f"Logged in .cplugin/{LOG_FILE}.")
+    lines.append(f"Logged in .foreman/{LOG_FILE}.")
     if files:
         lines.append("If this changed behaviour, update the owning section in mindmap/ "
                      "(and MIND_MAP.md if the big ideas changed).")

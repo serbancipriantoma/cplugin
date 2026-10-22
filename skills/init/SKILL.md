@@ -1,15 +1,15 @@
 ---
 name: init
-description: Set up or upgrade the current project for the cplugin workflow (config, MIND_MAP.md, CLAUDE.md block, .claude/bin launchers).
+description: Set up or upgrade the current project for the foreman workflow (config, MIND_MAP.md, CLAUDE.md block, .claude/bin launchers).
 argument-hint: "[project name]"
 disable-model-invocation: true
 ---
 
-# cplugin init
+# foreman init
 
-Set up this project for the cplugin workflow. Safe to re-run: it only adds what
-is missing, refreshes the cplugin block in CLAUDE.md and the launchers, and never
-overwrites `.cplugin/config.toml` or `MIND_MAP.md`.
+Set up this project for the foreman workflow. Safe to re-run: it only adds what
+is missing, refreshes the foreman block in CLAUDE.md and the launchers, and never
+overwrites `.foreman/config.toml` or `MIND_MAP.md`.
 
 Project name: $ARGUMENTS (when empty, the directory name is used)
 
@@ -23,12 +23,12 @@ Project name: $ARGUMENTS (when empty, the directory name is used)
 
 2. Summarize the report for the user: what was created, updated, left unchanged.
 
-3. If the report warns that this is not a git repository, explain why cplugin needs
+3. If the report warns that this is not a git repository, explain why foreman needs
    git and ask the user whether to run `git init`. Do not run it without a yes.
    Explain any other WARNING line.
 
 4. If `MIND_MAP.md` was just created, it is still the empty template. Offer to build
-   it now with `/cplugin:mindmap`.
+   it now with `/foreman:mindmap`.
 
 5. Tell the user the project memory loads automatically at the next session start,
    after `/clear`, and after every compaction.

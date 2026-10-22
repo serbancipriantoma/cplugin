@@ -1,4 +1,4 @@
-"""Per-session runtime state under .cplugin/sessions/<session_id>/.
+"""Per-session runtime state under .foreman/sessions/<session_id>/.
 
 - meta.json: which Claude Code process owns the session (pid plus the process
   start time, so a recycled pid is not mistaken for the old session).
@@ -26,7 +26,7 @@ from .project import Project
 META_FILE = "meta.json"
 STATE_FILE = "state.json"
 COUNTERS_FILE = "counters.json"
-ENV_VAR = "CPLUGIN_SESSION_ID"
+ENV_VAR = "FOREMAN_SESSION_ID"
 AGENT_PROCESS_NAME = "claude"
 IDLE_MAX_AGE_SECONDS = 7 * 24 * 3600
 
@@ -61,7 +61,7 @@ def process_start_time(pid: int) -> str | None:
 def find_agent_pid(start_pid: int | None = None, max_depth: int = 8) -> int | None:
     """Walk up the process tree to the Claude Code process that runs this hook."""
     if start_pid is None:
-        override = os.environ.get("CPLUGIN_AGENT_PID")
+        override = os.environ.get("FOREMAN_AGENT_PID")
         if override is not None:  # lets tests pin the owning process
             return int(override) if override.isdigit() else None
     pid = start_pid if start_pid is not None else os.getppid()
@@ -248,7 +248,7 @@ def inherit_from_same_process(project: Project, session_id: str, agent_pid: int 
 
 
 def resolve_cli_session(project: Project) -> str | None:
-    """Which session a `tasks` command belongs to: CPLUGIN_SESSION_ID when the
+    """Which session a `tasks` command belongs to: FOREMAN_SESSION_ID when the
     environment carries it, else the session registered by the Claude Code
     process this command runs under."""
     env_id = safe_session_id(os.environ.get(ENV_VAR))

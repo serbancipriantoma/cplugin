@@ -2,7 +2,7 @@ import json
 
 from helpers import SESSION, ProjectCase
 
-from cplugin import gates
+from foreman import gates
 
 
 class NewTest(ProjectCase):
@@ -12,7 +12,7 @@ class NewTest(ProjectCase):
         mind_map.write_text("# MIND_MAP\n\n## [6] Combat → mindmap/combat.md\n- damage\n")
         out = self.tasks_ok("new", "feature", "knight-damage", "--module", "combat",
                             "--request", "-", stdin="A knight hits an archer for 6-9.\n")
-        self.assertIn("Created task 001: .cplugin/tasks/001-feature-knight-damage/task.md", out)
+        self.assertIn("Created task 001: .foreman/tasks/001-feature-knight-damage/task.md", out)
         text = self.task_md().read_text()
         self.assertIn("# 001 — feature — knight-damage", text)
         self.assertIn("## Request\nA knight hits an archer for 6-9.\n", text)
@@ -39,7 +39,7 @@ class NewTest(ProjectCase):
             self.assertNotEqual(result.returncode, 0, args)
 
     def test_parallel_shape_when_tests_first_is_off(self):
-        config = self.project_dir / ".cplugin" / "config.toml"
+        config = self.project_dir / ".foreman" / "config.toml"
         config.write_text(config.read_text().replace("tests_first = true", "tests_first = false"))
         self.new_task()
         self.assertIn("in parallel", self.task_md().read_text())
@@ -48,14 +48,14 @@ class NewTest(ProjectCase):
 
 class LifecycleTest(ProjectCase):
     def state(self) -> dict:
-        path = self.project_dir / ".cplugin" / "sessions" / SESSION / "state.json"
+        path = self.project_dir / ".foreman" / "sessions" / SESSION / "state.json"
         return json.loads(path.read_text()) if path.exists() else {}
 
     def test_work_activates_and_reports_next_gate(self):
         self.new_task()
         out = self.tasks_ok("work", "1")
         self.assertIn("Active task: 001 feature knight-damage", out)
-        self.assertIn("Next gate (.cplugin/tasks/001-feature-knight-damage/task.md:", out)
+        self.assertIn("Next gate (.foreman/tasks/001-feature-knight-damage/task.md:", out)
         self.assertEqual(self.state()["task"], 1)
         self.assertIn("## Status\nactive", self.task_md().read_text())
         self.assertIn("Active task: 001", self.tasks_ok("status"))

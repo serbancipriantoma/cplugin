@@ -4,15 +4,15 @@ import tomllib
 
 from helpers import PLUGIN_ROOT, TempDirCase
 
-from cplugin.init import BLOCK_BEGIN, merge_claude_md, merge_settings
+from foreman.init import BLOCK_BEGIN, merge_claude_md, merge_settings
 
 
 class InitTest(TempDirCase):
     def test_creates_project_layout(self):
         self.init_project()
         p = self.project_dir
-        for rel in (".cplugin/config.toml", ".cplugin/.gitignore", ".cplugin/tasks",
-                    ".cplugin/sessions", "mindmap", "MIND_MAP.md", "CLAUDE.md",
+        for rel in (".foreman/config.toml", ".foreman/.gitignore", ".foreman/tasks",
+                    ".foreman/sessions", "mindmap", "MIND_MAP.md", "CLAUDE.md",
                     ".claude/settings.json", ".claude/bin/tasks", ".claude/bin/board", ".claude/bin/sandbox",
                     ".claude/bin/.gitignore"):
             self.assertTrue((p / rel).exists(), rel)
@@ -51,8 +51,8 @@ class InitTest(TempDirCase):
         sub.mkdir()
         result = self.run_tasks("init", cwd=sub)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("inside the cplugin project", result.stderr)
-        self.assertFalse((sub / ".cplugin").exists())
+        self.assertIn("inside the foreman project", result.stderr)
+        self.assertFalse((sub / ".foreman").exists())
 
     def test_disables_installed_playbook_only_when_unset(self):
         plugins = self.config_dir / "plugins"
@@ -105,13 +105,13 @@ command = "pytest -q"
 
 class ConfigUpgradeTest(TempDirCase):
     def config(self) -> str:
-        return (self.project_dir / ".cplugin" / "config.toml").read_text()
+        return (self.project_dir / ".foreman" / "config.toml").read_text()
 
     def test_upgrades_untouched_old_defaults_and_nothing_else(self):
-        (self.project_dir / ".cplugin").mkdir()
-        (self.project_dir / ".cplugin" / "config.toml").write_text(OLD_CONFIG)
+        (self.project_dir / ".foreman").mkdir()
+        (self.project_dir / ".foreman" / "config.toml").write_text(OLD_CONFIG)
         result = self.run_tasks("init")
-        self.assertIn("updated: .cplugin/config.toml (old defaults upgraded: roles.worker.paths, "
+        self.assertIn("updated: .foreman/config.toml (old defaults upgraded: roles.worker.paths, "
                       "roles.tester.paths)", result.stdout)
         text = self.config()
         self.assertIn('paths = ["**"]', text)
@@ -122,27 +122,27 @@ class ConfigUpgradeTest(TempDirCase):
         cfg = tomllib.loads(text)
         self.assertEqual(cfg["roles"]["worker"]["paths"], ["**"])
         self.assertEqual(cfg["roles"]["worker"]["max_parallel"], 1)
-        self.assertNotIn("updated: .cplugin/config.toml", self.run_tasks("init").stdout)
+        self.assertNotIn("updated: .foreman/config.toml", self.run_tasks("init").stdout)
 
     def test_customized_paths_are_left_alone(self):
-        (self.project_dir / ".cplugin").mkdir()
+        (self.project_dir / ".foreman").mkdir()
         custom = OLD_CONFIG.replace('["src/**", "app/**"]', '["game/**"]')
-        (self.project_dir / ".cplugin" / "config.toml").write_text(custom)
+        (self.project_dir / ".foreman" / "config.toml").write_text(custom)
         self.run_tasks("init")
         self.assertIn('paths = ["game/**"]', self.config())
 
 
 class MergeTest(TempDirCase):
-    BLOCK = "<!-- cplugin:begin -->\nnew\n<!-- cplugin:end -->\n"
+    BLOCK = "<!-- foreman:begin -->\nnew\n<!-- foreman:end -->\n"
 
     def test_replaces_existing_block_in_place(self):
-        existing = "top\n\n<!-- cplugin:begin x -->\nold\n<!-- cplugin:end -->\n\nbottom\n"
+        existing = "top\n\n<!-- foreman:begin x -->\nold\n<!-- foreman:end -->\n\nbottom\n"
         merged = merge_claude_md(existing, self.BLOCK, "P")
-        self.assertEqual(merged, "top\n\n<!-- cplugin:begin -->\nnew\n<!-- cplugin:end -->\n\nbottom\n")
+        self.assertEqual(merged, "top\n\n<!-- foreman:begin -->\nnew\n<!-- foreman:end -->\n\nbottom\n")
 
     def test_appends_when_no_block(self):
         self.assertEqual(merge_claude_md("top\n", self.BLOCK, "P"),
-                         "top\n\n<!-- cplugin:begin -->\nnew\n<!-- cplugin:end -->\n")
+                         "top\n\n<!-- foreman:begin -->\nnew\n<!-- foreman:end -->\n")
 
     def test_settings_respect_explicit_choice(self):
         settings = merge_settings({"enabledPlugins": {"playbook@m": True}}, ["playbook@m"])

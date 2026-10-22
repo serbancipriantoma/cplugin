@@ -1,24 +1,24 @@
 ---
 name: workflow
-description: How the main agent of a cplugin project works a task's Work Plan - delegating each step to the cplugin:tester and cplugin:worker sub-agents, tests first, and recording the results gate by gate. Use when a cplugin task is active and its Work Plan step needs code or tests.
+description: How the main agent of a foreman project works a task's Work Plan - delegating each step to the foreman:tester and foreman:worker sub-agents, tests first, and recording the results gate by gate. Use when a foreman task is active and its Work Plan step needs code or tests.
 ---
 
-# Working a cplugin step
+# Working a foreman step
 
-In a cplugin project the main agent (you, MAIN) **coordinates and never writes code or
+In a foreman project the main agent (you, MAIN) **coordinates and never writes code or
 tests**. Hooks block it. For each Work Plan step you brief two sub-agents and record what they
 did:
 
 | Role | Agent tool call | Writes |
 |---|---|---|
-| tester | `subagent_type: "cplugin:tester"` | tests only |
-| worker | `subagent_type: "cplugin:worker"` | production code only |
+| tester | `subagent_type: "foreman:tester"` | tests only |
+| worker | `subagent_type: "foreman:worker"` | production code only |
 
 Before the first step, run `.claude/bin/tasks config show` to see each role's model and
 paths. Pass that model on every Agent call (`model: "<roles.<role>.model>"`): the hook refuses
-a cplugin agent started with another model. Never use `isolation` for them: in a separate
-worktree they cannot see the active task. Run at most `roles.worker.max_parallel` workers at
-a time.
+a foreman agent started with another model. Never use `isolation` for them: in a separate
+worktree they cannot see the active task. At most `roles.worker.max_parallel` workers (1 by
+default) may run at once; the hook refuses one more until a worker has reported.
 
 ## Briefing a sub-agent
 
@@ -68,7 +68,7 @@ check their gates before their report is in.
 ## Plan and implementation reviews
 
 `.claude/bin/tasks plan-review <N>` and `impl-review <N>` run the judges configured in
-`.cplugin/config.toml` (Codex, Antigravity; a read-only Claude when neither is installed).
+`.foreman/config.toml` (Codex, Antigravity; a read-only Claude when neither is installed).
 They read the task and the repository, never your conversation, and cannot write.
 
 - They take minutes. Run the command in the background and wait for its notification.
@@ -89,4 +89,4 @@ They read the task and the repository, never your conversation, and cannot write
   redo it, and say which on the current gate.
 - **"matches neither roles.worker.paths nor roles.tester.paths"**: the file is code no role
   owns. If it should be writable, add it to the right role's `paths` in
-  `.cplugin/config.toml` and tell the user you did.
+  `.foreman/config.toml` and tell the user you did.

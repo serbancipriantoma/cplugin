@@ -1,10 +1,10 @@
 ---
 name: board
-description: Show the cplugin agent board once, in the chat - the active task, its gate, and what the main agent, the worker and the tester are doing.
+description: Show the foreman agent board once, in the chat - the active task, its gate, and what the main agent, the worker and the tester are doing.
 disable-model-invocation: true
 ---
 
-# cplugin board
+# foreman board
 
 Run this and show its output to the user exactly as printed, inside a code block:
 

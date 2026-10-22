@@ -9,7 +9,7 @@
     │ judge   │ ○ —        │                                       │
     └─────────┴────────────┴───────────────────────────────────────┘
 
-It reads what the hooks record under .cplugin/sessions/<id>/ and draws it;
+It reads what the hooks record under .foreman/sessions/<id>/ and draws it;
 it never writes anything.
 """
 
@@ -111,7 +111,7 @@ def collect(project: Project, session_id: str | None, now: float | None = None) 
     if state.get("freehand"):
         title = "FREEHAND · the user drives, rules suspended" if task is None else title + " · FREEHAND"
         if task is None:
-            subtitle = "ends with tasks work <N> or tasks freehand off; changes are logged in .cplugin/freehand.md"
+            subtitle = "ends with tasks work <N> or tasks freehand off; changes are logged in .foreman/freehand.md"
     if state.get("pause"):
         subtitle = f"waiting for the user: {state['pause']}"
 

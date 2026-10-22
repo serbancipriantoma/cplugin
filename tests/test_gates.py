@@ -2,7 +2,7 @@ import unittest
 
 import helpers  # noqa: F401  (puts the plugin on sys.path)
 
-from cplugin import gates
+from foreman import gates
 
 TASK = """# 001 — feature — x
 

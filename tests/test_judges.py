@@ -7,8 +7,8 @@ import unittest
 
 from helpers import PLUGIN_ROOT, SESSION, ProjectCase
 
-from cplugin import gates, judges
-from cplugin.project import Project
+from foreman import containment, gates, judges
+from foreman.project import Project
 
 REVIEW = """## Verdict
 ACCEPT WITH CHANGES — the plan holds, one gap.
@@ -26,7 +26,7 @@ stdin = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read()
 prompt = sys.argv[sys.argv.index("--print") + 1] if "--print" in sys.argv else stdin
 with open(os.environ["FAKE_LOG"], "a") as fh:
     fh.write(json.dumps({{"name": name, "argv": sys.argv[1:], "prompt": prompt,
-                          "judge_env": os.environ.get("CPLUGIN_JUDGE")}}) + "\n")
+                          "judge_env": os.environ.get("FOREMAN_JUDGE")}}) + "\n")
 mode = os.environ.get("FAKE_MODE_" + name.upper(), "ok")
 review = {review!r}
 if mode == "fail":
@@ -131,15 +131,15 @@ class PanelTest(JudgeCase):
         self.assertEqual(calls["agy"]["prompt"], prompt)
         self.assertEqual({c["judge_env"] for c in calls.values()}, {"1"})
 
-    @unittest.skipUnless(judges.seatbelt_status() == "ok", "needs a usable sandbox-exec")
+    @unittest.skipUnless(containment.detect().ok, "needs sandbox-exec or bubblewrap")
     def test_sandbox_blocks_agy_writes_and_codex_runs_read_only(self):
         self.fake("codex", "agy")
         result = self.review(agy="tamper")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertFalse((self.project_dir / "src" / "planted.js").exists())
         report = next((self.task_md().parent / "judges").glob("plan-review-agy-*.md")).read_text()
-        self.assertIn("write blocked: PermissionError", report)
-        self.assertIn("sandbox-exec, project read-only", report)
+        self.assertIn("write blocked:", report)
+        self.assertIn("project read-only", report)
         codex = next(c for c in self.calls() if c["name"] == "codex")["argv"]
         self.assertEqual(codex[codex.index("-s") + 1], "read-only")
 
@@ -186,7 +186,7 @@ class FailureTest(JudgeCase):
         self.assertEqual(argv[argv.index("--tools") + 1], "Read,Grep,Glob")
 
     def test_no_judge_at_all(self):
-        config = self.project_dir / ".cplugin" / "config.toml"
+        config = self.project_dir / ".foreman" / "config.toml"
         config.write_text(config.read_text().replace('fallback = "claude"', 'fallback = "none"'))
         result = self.review()
         self.assertEqual(result.returncode, 1)
@@ -216,13 +216,13 @@ class ImplReviewTest(JudgeCase):
         self.assertIn("=== DIFF SINCE THE TASK STARTED ===", prompt)
         self.assertIn("+export const greet = (n) => `Hi, ${n}!`", prompt)
         self.assertIn("NEW-FILE-MARKER", prompt)
-        self.assertNotIn(".cplugin/tasks", prompt.split("=== DIFF")[1])
+        self.assertNotIn(".foreman/tasks", prompt.split("=== DIFF")[1])
         self.assertIn("> **Judges, impl-review,", self.task_md().read_text().split("## 4.")[1])
 
 
 class BoardAndHooksTest(JudgeCase):
     def test_judges_show_on_the_board(self):
-        from cplugin import board
+        from foreman import board
         self.fake("codex", "agy")
         self.review()
         rows = {r.name: r for r in board.collect(Project(self.project_dir), SESSION).rows}
@@ -233,7 +233,7 @@ class BoardAndHooksTest(JudgeCase):
     def test_hooks_stand_down_inside_a_judge(self):
         out = subprocess.run([sys.executable, "-I", str(PLUGIN_ROOT / "hooks" / "run.py"), "pre-tool-use"],
                              input=json.dumps(self.payload("Write", {"file_path": str(self.project_dir / "src/x.js")})),
-                             capture_output=True, text=True, env={**self.env(), "CPLUGIN_JUDGE": "1"})
+                             capture_output=True, text=True, env={**self.env(), "FOREMAN_JUDGE": "1"})
         self.assertEqual((out.returncode, out.stdout), (0, ""))
 
 

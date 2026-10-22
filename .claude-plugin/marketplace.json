@@ -1,12 +1,12 @@
 {
-  "name": "cplugin-marketplace",
-  "description": "Marketplace for the cplugin plugin.",
+  "name": "foreman-marketplace",
+  "description": "Marketplace for the foreman plugin.",
   "owner": {
     "name": "Serban-Ciprian Toma"
   },
   "plugins": [
     {
-      "name": "cplugin",
+      "name": "foreman",
       "source": "./",
       "description": "Task-gated, multi-agent workflow for Claude Code: two-level project memory, strict agent roles, cross-provider judges."
     }

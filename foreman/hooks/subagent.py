@@ -1,4 +1,4 @@
-"""SubagentStart / SubagentStop: track sub-agents and brief the cplugin roles.
+"""SubagentStart / SubagentStop: track sub-agents and brief the foreman roles.
 
 SubagentStart records the agent (the board shows it, and the Stop hook lets
 the main agent wait for it) and, while a task is active, tells the agent what
@@ -13,14 +13,14 @@ from .. import agents, config, roles, session
 from ..status import active_task
 from .common import context, project_for, session_dir_for
 
-ROLE_BRIEF = """[cplugin] You are the {role} for task {title}, working on: {step}.
+ROLE_BRIEF = """[foreman] You are the {role} for task {title}, working on: {step}.
 You may write: {own}.
-You may not write: {forbidden}, task.md, MIND_MAP.md, mindmap/ or .cplugin/. Hooks block those writes, and files you change through Bash are checked too.
+You may not write: {forbidden}, task.md, MIND_MAP.md, mindmap/ or .foreman/. Hooks block those writes, and files you change through Bash are checked too.
 Do not run `.claude/bin/tasks` commands; the main agent manages the task.
 Finish with the report your instructions describe: it is all the main agent sees."""
 
-OTHER_BRIEF = ("[cplugin] Task {title} is active. While it is, only cplugin:worker writes "
-               "code and only cplugin:tester writes tests; you may read and run commands.")
+OTHER_BRIEF = ("[foreman] Task {title} is active. While it is, only foreman:worker writes "
+               "code and only foreman:tester writes tests; you may read and run commands.")
 
 
 def handle_start(payload: dict, plugin_root: Path) -> dict | None:
@@ -31,6 +31,7 @@ def handle_start(payload: dict, plugin_root: Path) -> dict | None:
         return None
     role = roles.role_of(payload)
     agents.record_start(directory, key, str(payload.get("agent_type") or ""), role)
+    agents.consume_pending(directory, role)
 
     state = session.read_state(directory)
     task = active_task(project, payload.get("session_id"))

@@ -1,15 +1,18 @@
 """Which agents are working in a session, and on what.
 
-One small file per agent under .cplugin/sessions/<id>/agents/, so parallel
+One small file per agent under .foreman/sessions/<id>/agents/, so parallel
 sub-agents never write the same file. MAIN's file is `main.json`. The hooks
 keep these up to date; the board (milestone 4) renders them.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import re
 import time
+import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from .fsutil import write_atomic
@@ -86,6 +89,57 @@ def is_running(record: dict, now: float) -> bool:
 def running_subagents(session_dir: Path) -> list[dict]:
     now = time.time()
     return [r for r in all_records(session_dir) if is_running(r, now)]
+
+
+# Starts approved by PreToolUse whose SubagentStart has not arrived yet: two Agent
+# calls in one message both reach PreToolUse before either agent is recorded.
+PENDING_DIR = "pending"
+PENDING_TTL_SECONDS = 120
+
+
+@contextmanager
+def spawn_lock(session_dir: Path):
+    """Serializes the count-then-approve of agent starts across parallel hooks."""
+    path = session_dir / AGENTS_DIR / ".spawn.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def _pending(session_dir: Path, role: str) -> list[Path]:
+    """Live pending starts for `role`, oldest first; expired ones are removed."""
+    directory = session_dir / AGENTS_DIR / PENDING_DIR
+    now, live = time.time(), []
+    for path in sorted(directory.glob(f"{role}-*.json")) if directory.is_dir() else []:
+        try:
+            age = now - path.stat().st_mtime
+        except OSError:
+            continue
+        if age < PENDING_TTL_SECONDS:
+            live.append(path)
+        else:
+            path.unlink(missing_ok=True)
+    return live
+
+
+def pending_count(session_dir: Path, role: str) -> int:
+    return len(_pending(session_dir, role))
+
+
+def add_pending(session_dir: Path, role: str) -> None:
+    directory = session_dir / AGENTS_DIR / PENDING_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    write_atomic(directory / f"{role}-{time.time_ns()}-{uuid.uuid4().hex[:8]}.json", "{}\n")
+
+
+def consume_pending(session_dir: Path, role: str) -> None:
+    pending = _pending(session_dir, role)
+    if pending:
+        pending[0].unlink(missing_ok=True)
 
 
 def action_target(payload: dict) -> str:

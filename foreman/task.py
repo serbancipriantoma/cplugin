@@ -1,4 +1,4 @@
-"""Tasks: .cplugin/tasks/<NNN>-<type>-<slug>/task.md."""
+"""Tasks: .foreman/tasks/<NNN>-<type>-<slug>/task.md."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ MAX_SLUG = 48
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _DIR_RE = re.compile(r"^(\d{3,})-([a-z]+)-([a-z0-9-]+)$")
-TASK_PATH_RE = re.compile(r"(^|/)\.cplugin/tasks/([^/]+)/task\.md$")
+TASK_PATH_RE = re.compile(r"(^|/)\.foreman/tasks/([^/]+)/task\.md$")
 _STATUS_RE = re.compile(r"(^## Status[ \t]*\n+)([^\n]*)", re.MULTILINE)
 
 

@@ -12,10 +12,10 @@ from pathlib import Path
 
 from . import codefiles, globs
 
-PLUGIN_PREFIX = "cplugin:"
+PLUGIN_PREFIX = "foreman:"
 MAIN, WORKER, TESTER, OTHER = "main", "worker", "tester", "other"
 UNASSIGNED = "unassigned"   # code matched by neither the tester nor the worker paths
-WORKFLOW_HINT = "See the cplugin:workflow skill for how to delegate a step."
+WORKFLOW_HINT = "See the foreman:workflow skill for how to delegate a step."
 
 
 def role_of(payload: dict) -> str:
@@ -54,13 +54,13 @@ def write_violation(role: str, rel: str, abs_path: Path, cfg: dict) -> str | Non
         return None
     if own == UNASSIGNED:
         return (f"{rel} is code, but it matches neither roles.worker.paths nor roles.tester.paths "
-                f"in .cplugin/config.toml, so no role may write it. If it should be writable, "
+                f"in .foreman/config.toml, so no role may write it. If it should be writable, "
                 f"the main agent adds it to the right role's paths.")
     if role == MAIN:
         what = "tests" if own == TESTER else "production code"
         return (f"The main agent coordinates and does not write {what}: {rel} belongs to the "
                 f"{own}. Delegate the change with the Agent tool, subagent_type "
-                f"'cplugin:{own}'. {WORKFLOW_HINT}")
+                f"'foreman:{own}'. {WORKFLOW_HINT}")
     if own == MAIN:
         return (f"{rel} belongs to the main agent. Put what you have to say about it in your "
                 f"final report instead.")
@@ -70,5 +70,5 @@ def write_violation(role: str, rel: str, abs_path: Path, cfg: dict) -> str | Non
     if role == TESTER:
         return (f"As the tester you may not change production code: {rel} belongs to the worker. "
                 f"Test the interface you were given, and report if it cannot be tested as specified.")
-    return (f"While a task is active only cplugin:worker writes code and only cplugin:tester "
+    return (f"While a task is active only foreman:worker writes code and only foreman:tester "
             f"writes tests; {rel} belongs to the {own}. Report back to the main agent instead.")

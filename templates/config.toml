@@ -1,4 +1,4 @@
-# cplugin project configuration. Commit this file.
+# foreman project configuration. Commit this file.
 # Paths are glob patterns relative to the project root.
 
 [workflow]
@@ -20,7 +20,7 @@ code_dirs = ["bin", "scripts"]   # everything in these directories counts as cod
 # Claude sub-agent that writes production code.
 model = "opus"
 paths = ["**"]                      # narrow it (e.g. ["src/**"]) to fence the worker in
-max_parallel = 1                    # how many workers may run at once
+max_parallel = 1                    # workers at once; raise it only for steps that touch different files
 
 [roles.tester]
 # Claude sub-agent that writes tests from the step's criteria, before the code exists.

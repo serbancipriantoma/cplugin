@@ -40,9 +40,9 @@ class TempDirCase(unittest.TestCase):
         self._tmp.cleanup()
 
     def env(self, **extra: str) -> dict[str, str]:
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE_", "CPLUGIN_"))}
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE_", "FOREMAN_"))}
         env["CLAUDE_CONFIG_DIR"] = str(self.config_dir)
-        env["CPLUGIN_AGENT_PID"] = "none"
+        env["FOREMAN_AGENT_PID"] = "none"
         env["PATH"] = f"{self.guard_bin}{os.pathsep}{env.get('PATH', '')}"
         env.update(extra)
         return env
@@ -63,7 +63,7 @@ class TempDirCase(unittest.TestCase):
     def run_tasks(self, *args: str, cwd: Path | None = None, stdin: str | None = None,
                   session: str | None = SESSION, extra_env: dict[str, str] | None = None,
                   timeout: float = 30) -> subprocess.CompletedProcess:
-        extra = {"CPLUGIN_SESSION_ID": session} if session else {}
+        extra = {"FOREMAN_SESSION_ID": session} if session else {}
         return subprocess.run(
             [sys.executable, "-I", str(PLUGIN_ROOT / "bin" / "tasks.py"), *args],
             capture_output=True, text=True, env=self.env(**extra, **(extra_env or {})), input=stdin,
@@ -89,7 +89,7 @@ class TempDirCase(unittest.TestCase):
                 "tool_input": tool_input, **extra}
 
     def task_md(self, num: int = 1) -> Path:
-        return next((self.project_dir / ".cplugin" / "tasks").glob(f"{num:03d}-*/task.md"))
+        return next((self.project_dir / ".foreman" / "tasks").glob(f"{num:03d}-*/task.md"))
 
 
 class ProjectCase(TempDirCase):

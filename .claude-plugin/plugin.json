@@ -1,5 +1,5 @@
 {
-  "name": "cplugin",
+  "name": "foreman",
   "version": "0.1.0",
   "description": "Task-gated, multi-agent workflow for Claude Code: two-level project memory, strict agent roles, cross-provider judges.",
   "author": {

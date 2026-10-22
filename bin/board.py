@@ -13,16 +13,16 @@ from pathlib import Path
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 
 if sys.version_info < (3, 11):
-    sys.exit(f"cplugin needs Python 3.11+, found {sys.version.split()[0]}")
+    sys.exit(f"foreman needs Python 3.11+, found {sys.version.split()[0]}")
 
 sys.path.insert(0, str(PLUGIN_ROOT))
 
-from cplugin import board  # noqa: E402
-from cplugin.project import Project, find_project_root  # noqa: E402
+from foreman import board  # noqa: E402
+from foreman.project import Project, find_project_root  # noqa: E402
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="board", description="cplugin agent board")
+    parser = argparse.ArgumentParser(prog="board", description="foreman agent board")
     parser.add_argument("--watch", action="store_true", help="redraw until Ctrl+C")
     parser.add_argument("--interval", type=float, default=1.0, help="seconds between redraws (default 1)")
     parser.add_argument("--session", help="session ID or prefix (default: the live session)")
@@ -31,7 +31,7 @@ def main(argv: list[str]) -> int:
 
     root = find_project_root(os.getcwd())
     if root is None:
-        print("error: not inside a cplugin project (no .cplugin/config.toml found)", file=sys.stderr)
+        print("error: not inside a foreman project (no .foreman/config.toml found)", file=sys.stderr)
         return 1
     project = Project(root)
     color = not args.no_color and sys.stdout.isatty() and "NO_COLOR" not in os.environ

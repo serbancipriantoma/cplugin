@@ -1,4 +1,4 @@
-"""Mechanical project setup behind `tasks init` and /cplugin:init. Idempotent."""
+"""Mechanical project setup behind `tasks init` and /foreman:init. Idempotent."""
 
 from __future__ import annotations
 
@@ -10,16 +10,18 @@ from pathlib import Path
 
 from . import gitutil, wrappers
 from .fsutil import write_atomic, write_if_changed
-from .project import Project
+from .project import LEGACY_STATE_DIR, STATE_DIR, Project
 
 # Tools that would compete with task.md as the source of truth.
 DENIED_TOOLS = ["TodoWrite", "EnterPlanMode"]
-# Plugins switched off in cplugin projects, unless the project already decided.
+# Plugins switched off in foreman projects, unless the project already decided.
 CONFLICTING_PLUGINS = ("playbook",)
 
-BLOCK_BEGIN = "<!-- cplugin:begin"
-BLOCK_END = "<!-- cplugin:end -->"
+BLOCK_BEGIN = "<!-- foreman:begin"
+BLOCK_END = "<!-- foreman:end -->"
 _BLOCK_RE = re.compile(re.escape(BLOCK_BEGIN) + r".*?" + re.escape(BLOCK_END), re.DOTALL)
+# The block as written before the plugin was named foreman.
+_LEGACY_BLOCK_RE = re.compile(r"<!-- cplugin:begin.*?<!-- cplugin:end -->", re.DOTALL)
 
 
 @dataclass
@@ -49,8 +51,9 @@ def merge_claude_md(existing: str | None, block: str, project_name: str) -> str:
     block = block.strip()
     if existing is None:
         return f"# {project_name}\n\n{block}\n"
-    if _BLOCK_RE.search(existing):
-        return _BLOCK_RE.sub(lambda _: block, existing, count=1)
+    for pattern in (_BLOCK_RE, _LEGACY_BLOCK_RE):
+        if pattern.search(existing):
+            return pattern.sub(lambda _: block, existing, count=1)
     return existing.rstrip("\n") + "\n\n" + block + "\n"
 
 
@@ -116,6 +119,11 @@ def init_project(root: Path, plugin_root: Path, name: str | None = None) -> Repo
     name = name or project.root.name
     report = Report()
 
+    legacy = project.root / LEGACY_STATE_DIR
+    if legacy.is_dir() and not project.state_dir.exists():
+        os.rename(legacy, project.state_dir)
+        report.record("updated", f"{LEGACY_STATE_DIR}/ moved to {STATE_DIR}/ (the plugin is now named foreman)")
+
     for directory in (project.state_dir, project.tasks_dir, project.sessions_dir, project.mindmap_dir):
         if directory.is_dir():
             report.record("unchanged", _rel(project, directory) + "/")
@@ -146,7 +154,7 @@ def init_project(root: Path, plugin_root: Path, name: str | None = None) -> Repo
 
     existing = project.claude_md.read_text(encoding="utf-8") if project.claude_md.is_file() else None
     merged = merge_claude_md(existing, _template(plugin_root, "CLAUDE.md"), name)
-    report.record(write_if_changed(project.claude_md, merged), "CLAUDE.md (cplugin block)")
+    report.record(write_if_changed(project.claude_md, merged), "CLAUDE.md (foreman block)")
 
     settings_rel = _rel(project, project.settings_path)
     settings: dict | None = {}
@@ -168,7 +176,7 @@ def init_project(root: Path, plugin_root: Path, name: str | None = None) -> Repo
 
     if not gitutil.is_repo(project.root):
         report.warnings.append(
-            "not a git repository. cplugin needs git for the Bash write check, the "
+            "not a git repository. foreman needs git for the Bash write check, the "
             "impl-review diff and the judge tamper guard. Run `git init`."
         )
     return report

@@ -8,8 +8,8 @@ from contextlib import redirect_stdout
 
 from helpers import PLUGIN_ROOT, SESSION, ProjectCase
 
-from cplugin import agents, board, session
-from cplugin.project import Project
+from foreman import agents, board, session
+from foreman.project import Project
 
 NOW = 1_800_000_000.0
 
@@ -109,7 +109,7 @@ class CollectTest(ProjectCase):
 class SessionChoiceTest(ProjectCase):
     def test_prefers_live_then_active_task_then_recent(self):
         project = Project(self.project_dir)
-        sessions = self.project_dir / ".cplugin" / "sessions"
+        sessions = self.project_dir / ".foreman" / "sessions"
         for name, meta, state in (("old-live", {"pid": os.getpid(), "last_seen_at": 1}, {}),
                                   ("new-dead", {"pid": None, "last_seen_at": time.time()}, {"task": 1})):
             (sessions / name).mkdir()

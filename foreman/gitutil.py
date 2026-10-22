@@ -1,4 +1,4 @@
-"""The few git calls cplugin needs."""
+"""The few git calls foreman needs."""
 
 from __future__ import annotations
 

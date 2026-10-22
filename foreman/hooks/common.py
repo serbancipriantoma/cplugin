@@ -24,7 +24,7 @@ def session_dir_for(project: Project, payload: dict) -> Path | None:
 
 
 def ensure_registered(project: Project, payload: dict) -> None:
-    """A session that started before /cplugin:init never ran SessionStart in this
+    """A session that started before /foreman:init never ran SessionStart in this
     project. Register it on first contact so the `tasks` CLI can find it."""
     session_id = session.safe_session_id(payload.get("session_id"))
     if session_id and not (session.session_dir(project, session_id) / session.META_FILE).is_file():

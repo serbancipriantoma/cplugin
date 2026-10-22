@@ -12,7 +12,7 @@ class PostToolUseTest(ProjectCase):
         return context_of(self.hook_json("post-tool-use", self.payload(tool, tool_input or {"file_path": "x"}, **extra)))
 
     def counters(self) -> dict:
-        return json.loads((self.project_dir / ".cplugin/sessions" / SESSION / "counters.json").read_text())
+        return json.loads((self.project_dir / ".foreman/sessions" / SESSION / "counters.json").read_text())
 
     def test_silent_without_a_task_but_counts(self):
         self.assertEqual(self.post(), "")
@@ -24,7 +24,7 @@ class PostToolUseTest(ProjectCase):
         self.new_task()
         self.activate()
         text = self.post()
-        self.assertRegex(text, r"^\[cplugin\] Task 001 · gate 1/\d+ · \.cplugin/tasks/001-feature-knight-damage/task\.md:\d+ "
+        self.assertRegex(text, r"^\[foreman\] Task 001 · gate 1/\d+ · \.foreman/tasks/001-feature-knight-damage/task\.md:\d+ "
                                r"\[1\. Design\] Read the affected sections")
 
     def test_questions_start_after_a_few_calls_on_one_gate(self):
@@ -60,7 +60,7 @@ class PostToolUseTest(ProjectCase):
     def test_sub_agents_are_left_alone_for_now(self):
         self.new_task()
         self.activate()
-        self.assertEqual(self.post(agent_type="cplugin:worker"), "")
+        self.assertEqual(self.post(agent_type="foreman:worker"), "")
 
 
 class StopTest(ProjectCase):
@@ -103,7 +103,7 @@ class StopTest(ProjectCase):
     def test_counters_reset_when_the_turn_ends(self):
         self.busy_turn()
         self.assertIsNone(self.stop())
-        counters = json.loads((self.project_dir / ".cplugin/sessions" / SESSION / "counters.json").read_text())
+        counters = json.loads((self.project_dir / ".foreman/sessions" / SESSION / "counters.json").read_text())
         self.assertEqual((counters["turn_tools"], counters["turn_writes"]), (0, 0))
 
     def test_no_task_means_no_block(self):
@@ -117,7 +117,7 @@ class SessionEndTest(ProjectCase):
         self.activate()
         self.hook_json("session-end", {"session_id": SESSION, "cwd": str(self.project_dir),
                                        "reason": "prompt_input_exit"})
-        directory = self.project_dir / ".cplugin/sessions" / SESSION
+        directory = self.project_dir / ".foreman/sessions" / SESSION
         self.assertEqual(json.loads((directory / "meta.json").read_text())["end_reason"], "prompt_input_exit")
         self.assertEqual(json.loads((directory / "state.json").read_text())["task"], 1)
         context = self.start_session(source="resume")

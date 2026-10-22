@@ -3,7 +3,7 @@ from pathlib import Path
 
 import helpers  # noqa: F401  (puts the plugin on sys.path)
 
-from cplugin import config, globs, roles
+from foreman import config, globs, roles
 
 CFG = config.DEFAULTS
 
@@ -26,8 +26,8 @@ class GlobsTest(unittest.TestCase):
 class RolesTest(unittest.TestCase):
     def test_role_of(self):
         self.assertEqual(roles.role_of({}), roles.MAIN)
-        self.assertEqual(roles.role_of({"agent_type": "cplugin:worker"}), roles.WORKER)
-        self.assertEqual(roles.role_of({"agent_type": "cplugin:tester"}), roles.TESTER)
+        self.assertEqual(roles.role_of({"agent_type": "foreman:worker"}), roles.WORKER)
+        self.assertEqual(roles.role_of({"agent_type": "foreman:tester"}), roles.TESTER)
         self.assertEqual(roles.role_of({"agent_type": "general-purpose"}), roles.OTHER)
         self.assertEqual(roles.role_of({"agent_type": "other-plugin:worker"}), roles.OTHER)
 
@@ -55,9 +55,9 @@ class RolesTest(unittest.TestCase):
         self.assertIsNone(roles.write_violation(roles.TESTER, "tests/a.test.ts", x, CFG))
         self.assertIsNone(roles.write_violation(roles.MAIN, "MIND_MAP.md", x, CFG))
         self.assertIsNone(roles.write_violation(roles.WORKER, "README.md", x, CFG))
-        self.assertIn("cplugin:worker", roles.write_violation(roles.MAIN, "src/a.ts", x, CFG))
-        self.assertIn("cplugin:tester", roles.write_violation(roles.MAIN, "tests/a.test.ts", x, CFG))
+        self.assertIn("foreman:worker", roles.write_violation(roles.MAIN, "src/a.ts", x, CFG))
+        self.assertIn("foreman:tester", roles.write_violation(roles.MAIN, "tests/a.test.ts", x, CFG))
         self.assertIn("may not change tests", roles.write_violation(roles.WORKER, "tests/a.test.ts", x, CFG))
         self.assertIn("may not change production code", roles.write_violation(roles.TESTER, "src/a.ts", x, CFG))
         self.assertIn("belongs to the main agent", roles.write_violation(roles.TESTER, "MIND_MAP.md", x, CFG))
-        self.assertIn("only cplugin:worker writes code", roles.write_violation(roles.OTHER, "src/a.ts", x, CFG))
+        self.assertIn("only foreman:worker writes code", roles.write_violation(roles.OTHER, "src/a.ts", x, CFG))

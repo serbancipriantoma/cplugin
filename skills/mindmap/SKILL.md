@@ -1,10 +1,10 @@
 ---
 name: mindmap
-description: Build or refresh the two-level project memory of a cplugin project - MIND_MAP.md (big ideas) and mindmap/<module>.md (details per module) - from the codebase and the user's explanations.
+description: Build or refresh the two-level project memory of a foreman project - MIND_MAP.md (big ideas) and mindmap/<module>.md (details per module) - from the codebase and the user's explanations.
 argument-hint: "[module to focus on]"
 ---
 
-# cplugin mind map
+# foreman mind map
 
 The project memory has two levels:
 
@@ -17,10 +17,10 @@ Focus: $ARGUMENTS (when empty, cover the whole project)
 
 ## 0. Preconditions
 
-If `.cplugin/config.toml` does not exist, tell the user to run `/cplugin:init` first and stop.
+If `.foreman/config.toml` does not exist, tell the user to run `/foreman:init` first and stop.
 
 Decide the mode:
-- **Build**: `MIND_MAP.md` is missing or still contains the `<!-- cplugin:stub` line.
+- **Build**: `MIND_MAP.md` is missing or still contains the `<!-- foreman:stub` line.
 - **Refresh**: it has real content. Keep what the user wrote, update nodes in place,
   fix what is stale, and never append one node per task or per change.
 
@@ -44,7 +44,7 @@ Wait for the answer before writing.
 
 - Open `MIND_MAP.md` with the Read tool first, even if you already saw it through
   Bash: the Write tool refuses to overwrite a file this session has not Read.
-- Delete the `<!-- cplugin:stub ... -->` line.
+- Delete the `<!-- foreman:stub ... -->` line.
 - `[1] Overview` first: what the project is, who uses it, the module list with node numbers.
 - One node per module, titled `## [N] <Module> → mindmap/<file>.md`, with 3-6 bullets
   stating what the module does, linking related nodes as `[N]`.
@@ -86,7 +86,7 @@ and link the parts from the module file.
 
 ## 5. Verify
 
-- `MIND_MAP.md` no longer contains the `<!-- cplugin:stub` line. If it does, the write
+- `MIND_MAP.md` no longer contains the `<!-- foreman:stub` line. If it does, the write
   failed: Read the file and write it again before going on.
 - Every module node links a detail file that exists, and each detail file names its node.
 - `wc -c MIND_MAP.md` is under 8,500. If not, move detail down into `mindmap/`.

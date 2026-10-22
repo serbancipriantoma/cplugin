@@ -1,7 +1,7 @@
 """SessionStart: register the session, refresh launchers, load the project memory.
 
 Fires on startup, resume, clear and compact, so the map and the active task
-are back in context after every compaction. Outside a cplugin project it does
+are back in context after every compaction. Outside a foreman project it does
 nothing.
 """
 
@@ -10,8 +10,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .. import config, environment, judges, mindmap, session, status, wrappers
-from ..project import Project, find_project_root
+from .. import config, containment, environment, mindmap, session, status, wrappers
+from ..project import Project, find_legacy_root, find_project_root
 
 
 def _export_session_id(session_id: str) -> None:
@@ -22,9 +22,16 @@ def _export_session_id(session_id: str) -> None:
 
 
 def handle(payload: dict, plugin_root: Path) -> dict | None:
-    root = find_project_root(payload.get("cwd") or os.getcwd())
+    cwd = payload.get("cwd") or os.getcwd()
+    root = find_project_root(cwd)
     if root is None:
-        return None
+        legacy = find_legacy_root(cwd)
+        if legacy is None:
+            return None
+        note = (f"foreman: {legacy} still uses the layout from before the plugin was renamed "
+                "(.cplugin/). Run /foreman:init to move it to .foreman/; until then foreman is inactive here.")
+        return {"systemMessage": note,
+                "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": note}}
     project = Project(root)
     warnings: list[str] = []
 
@@ -59,7 +66,7 @@ def handle(payload: dict, plugin_root: Path) -> dict | None:
     state = session.read_state(session.session_dir(project, session_id)) if session_id else {}
     since = (state.get("freehand") or {}).get("since")
     cfg = config.load_or_defaults(project, warnings)
-    banner = environment.banner(project, cfg, task, judges.seatbelt_status(), since)
+    banner = environment.banner(project, cfg, task, containment.detect(), since)
     # The banner goes to the user (systemMessage) and, for the main agent, into the context.
     summary = f"{status.task_summary(project, task, since)}\n\nThis session, as shown to the user:\n{banner}"
     return {

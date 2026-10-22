@@ -3,10 +3,11 @@ conversation.
 
 Each seat in config.toml ([[judges.seat]]) is an external CLI run headless in
 the project: `codex` inside its own read-only sandbox, `agy` (and the `claude`
-fallback, limited to Read/Grep/Glob) under sandbox-exec with the project
-read-only. Whatever the containment, a tamper check compares the working tree
-and task.md before and after: if anything changed, the reviews are not used
-and the run fails. Reports go to the task's judges/ folder; a summary, quoted
+fallback, limited to Read/Grep/Glob) under sandbox-exec or bubblewrap, with the
+project read-only and only temp and their own state writable
+(foreman.containment). Whatever the containment, a tamper check compares the
+working tree and task.md before and after: if anything changed, the reviews
+are not used and the run fails. Reports go to the task's judges/ folder; a summary, quoted
 so it can never pass for gates, goes into the task's review section.
 """
 
@@ -24,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import agents, bashcheck, gitutil
+from . import agents, bashcheck, containment, gitutil
 from .fsutil import write_atomic
 from .project import MINDMAP_DIR, Project
 from .task import Task, append_to_section, read_meta
@@ -32,7 +33,7 @@ from .task import Task, append_to_section, read_meta
 EXECUTABLES = {"codex": "codex", "agy": "agy", "claude": "claude"}
 ALIASES = {"antigravity": "agy"}
 FALLBACK_MODEL = "sonnet"
-JUDGE_ENV = "CPLUGIN_JUDGE"   # set for judge processes; cplugin's own hooks stand down
+JUDGE_ENV = "FOREMAN_JUDGE"   # set for judge processes; foreman's own hooks stand down
 
 MAX_DETAIL_CHARS = 20_000
 MAX_DIFF_CHARS = 60_000
@@ -177,7 +178,7 @@ def task_for_judges(text: str) -> str:
 
 def task_diff(project: Project, task: Task) -> str:
     root = project.root
-    exclude = ":(exclude).cplugin"
+    exclude = ":(exclude).foreman"
     base = read_meta(task).get("base") or gitutil.head(root)
     parts = []
     if base:
@@ -212,38 +213,16 @@ def build_prompt(project: Project, task: Task, stage: str, plugin_root: Path) ->
 
 # ── containment ─────────────────────────────────────────────────────────────
 
-def seatbelt_status() -> str:
-    """"ok" when sandbox-exec can apply a deny rule here, "nested" when an outer
-    sandbox forbids it (macOS refuses nested profiles that add rules), else "none"."""
-    if not shutil.which("sandbox-exec"):
-        return "none"
-    probe = '(version 1)(allow default)(deny file-write* (subpath "/cplugin-nesting-probe"))'
-    try:
-        rc = subprocess.run(["sandbox-exec", "-p", probe, "/usr/bin/true"], capture_output=True, timeout=10).returncode
-    except (OSError, subprocess.SubprocessError):
-        return "none"
-    return "ok" if rc == 0 else "nested"
-
-
-def read_only_profile(project: Project) -> str:
-    paths = {str(project.root), str(project.root.resolve())}
-    git_dir = gitutil.git_dir(project.root)
-    if git_dir:
-        paths |= {str(git_dir), str(git_dir.resolve())}
-    rules = "".join(f'(deny file-write* (subpath "{p}"))' for p in sorted(paths))
-    return f"(version 1)(allow default){rules}"
-
-
 def command(seat: Seat, project: Project, prompt: str, out_file: Path, timeout_s: int,
-            seatbelt: str) -> tuple[list[str], str | None, str]:
+            found: containment.Containment) -> tuple[list[str], str | None, str]:
     """argv, stdin and a description of the containment for one judge."""
     root = str(project.root)
     if seat.provider == "codex":
         argv = ["codex", "exec", "--ephemeral", "--skip-git-repo-check", "--color", "never",
                 "-C", root, "-o", str(out_file)]
         argv += ["-m", seat.model] if seat.model else []
-        if seatbelt == "nested":
-            # codex's own sandbox cannot nest either; the outer one still applies.
+        if found.tool == "sandbox-exec" and found.state == "nested":
+            # codex's own macOS sandbox cannot nest either; the outer one still applies.
             return argv + ["--dangerously-bypass-approvals-and-sandbox", "-"], prompt, \
                 "outer sandbox only (nested), plus the tamper check"
         return argv + ["-s", "read-only", "-"], prompt, "codex read-only sandbox, plus the tamper check"
@@ -257,19 +236,20 @@ def command(seat: Seat, project: Project, prompt: str, out_file: Path, timeout_s
         inner = ["claude", "-p", "--tools", "Read,Grep,Glob", "--no-session-persistence",
                  "--model", seat.model or FALLBACK_MODEL]
         stdin = prompt
-    if seatbelt == "ok":
-        return ["sandbox-exec", "-p", read_only_profile(project), *inner], stdin, \
-            "sandbox-exec, project read-only, plus the tamper check"
-    return inner, stdin, f"no OS sandbox ({seatbelt}); only the tamper check"
+    wrapped = containment.wrap_read_only(project.root, inner, found)
+    if wrapped is not None:
+        return wrapped, stdin, f"{found.tool}, project read-only, only temp and the CLI's own state writable, plus the tamper check"
+    return inner, stdin, f"no OS sandbox ({found.describe()}); only the tamper check"
 
 
 # ── running ─────────────────────────────────────────────────────────────────
 
-def _run_one(seat: Seat, project: Project, prompt: str, timeout_s: int, seatbelt: str) -> Review:
+def _run_one(seat: Seat, project: Project, prompt: str, timeout_s: int,
+             found: containment.Containment) -> Review:
     review = Review(seat)
-    with tempfile.TemporaryDirectory(prefix="cplugin-judge-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="foreman-judge-") as tmp:
         out_file = Path(tmp) / "last-message.md"
-        argv, stdin, review.containment = command(seat, project, prompt, out_file, timeout_s, seatbelt)
+        argv, stdin, review.containment = command(seat, project, prompt, out_file, timeout_s, found)
         env = {**os.environ, JUDGE_ENV: "1"}
         started = time.monotonic()
         try:
@@ -321,10 +301,10 @@ def review(project: Project, task: Task, stage: str, cfg: dict, plugin_root: Pat
     seats, notes = choose_seats(cfg, seat_overrides)
     timeout_s = int(60 * (timeout_min or float(cfg.get("judges", {}).get("timeout_min") or 8)))
     prompt = build_prompt(project, task, stage, plugin_root)
-    seatbelt = seatbelt_status()
-    if seatbelt != "ok":
-        notes.append(f"sandbox-exec is unavailable here ({seatbelt}); the judges run without OS "
-                     "write protection, and only the tamper check guards the project")
+    found = containment.detect()
+    if not found.ok and any(s.provider != "codex" for s in seats):
+        notes.append(f"no OS sandbox for the judges here ({found.describe()}); only the tamper "
+                     "check guards the project")
 
     for seat in seats:
         if session_dir is not None:
@@ -333,7 +313,7 @@ def review(project: Project, task: Task, stage: str, cfg: dict, plugin_root: Pat
                                  STAGES[stage]["command"], seat.model or seat.provider)
     before = _fingerprint(project, task)
     with ThreadPoolExecutor(max_workers=len(seats)) as pool:
-        reviews = list(pool.map(lambda s: _run_one(s, project, prompt, timeout_s, seatbelt), seats))
+        reviews = list(pool.map(lambda s: _run_one(s, project, prompt, timeout_s, found), seats))
     after = _fingerprint(project, task)
     if session_dir is not None:
         for seat in seats:

@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import VERSION, config, environment, freehand, gates, judges, mindmap, session
+from . import VERSION, config, containment, environment, freehand, gates, judges, mindmap, session
 from .init import init_project
 from .project import Project, find_project_root
 from .status import active_task as _active, task_summary, where as _where
@@ -22,7 +22,7 @@ class CliError(Exception):
 def _project() -> Project:
     root = find_project_root(os.getcwd())
     if root is None:
-        raise CliError("not inside a cplugin project (no .cplugin/config.toml found). Run /cplugin:init first.")
+        raise CliError("not inside a foreman project (no .foreman/config.toml found). Run /foreman:init first.")
     return Project(root)
 
 
@@ -30,7 +30,7 @@ def _session(project: Project) -> str:
     session_id = session.resolve_cli_session(project)
     if session_id is None:
         raise CliError("cannot tell which Claude Code session this is. Run this command from "
-                       "inside Claude Code, in a session started after /cplugin:init.")
+                       "inside Claude Code, in a session started after /foreman:init.")
     return session_id
 
 
@@ -103,7 +103,7 @@ def _cmd_freehand(args: argparse.Namespace, plugin_root: Path) -> int:
           "no longer require a task for code, enforce roles, or hold the turn open.")
     if paused is not None:
         print(f"Task {paused.label} is paused meanwhile.")
-    print("What changes meanwhile is logged in .cplugin/freehand.md when freehand ends.")
+    print("What changes meanwhile is logged in .foreman/freehand.md when freehand ends.")
     return 0
 
 
@@ -205,7 +205,7 @@ def _cmd_start(args: argparse.Namespace, plugin_root: Path) -> int:
     project = _project()
     cfg = config.load(project)
     print(environment.report(project, cfg, plugin_root, session.resolve_cli_session(project),
-                             judges.seatbelt_status()))
+                             containment.detect()))
     return 0
 
 
@@ -235,10 +235,10 @@ def _cmd_init(args: argparse.Namespace, plugin_root: Path) -> int:
     target = Path(args.dir or os.getcwd()).resolve()
     enclosing = find_project_root(target)
     if args.dir is None and enclosing is not None and enclosing != target:
-        raise CliError(f"{target} is inside the cplugin project at {enclosing}.\n"
+        raise CliError(f"{target} is inside the foreman project at {enclosing}.\n"
                        f"Run init there, or pass --dir to create a nested project on purpose.")
     report = init_project(target, plugin_root, args.name)
-    print(f"cplugin {VERSION} init: {target}")
+    print(f"foreman {VERSION} init: {target}")
     print(report.render())
     return 0
 
@@ -252,12 +252,12 @@ def _cmd_context(args: argparse.Namespace, plugin_root: Path) -> int:
 
 
 def _cmd_version(args: argparse.Namespace, plugin_root: Path) -> int:
-    print(f"cplugin {VERSION} ({plugin_root})")
+    print(f"foreman {VERSION} ({plugin_root})")
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="tasks", description="cplugin task workflow")
+    parser = argparse.ArgumentParser(prog="tasks", description="foreman task workflow")
     sub = parser.add_subparsers(dest="command", required=True, metavar="<command>")
 
     p = sub.add_parser("new", help="create a task")
@@ -307,7 +307,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--timeout-min", type=float, help="minutes before a judge is stopped")
         p.set_defaults(func=_cmd_review)
 
-    p = sub.add_parser("init", help="set up or upgrade the current directory as a cplugin project")
+    p = sub.add_parser("init", help="set up or upgrade the current directory as a foreman project")
     p.add_argument("--name", help="project name (default: directory name)")
     p.add_argument("--dir", help="project directory (default: current directory)")
     p.set_defaults(func=_cmd_init)

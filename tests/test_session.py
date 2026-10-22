@@ -7,8 +7,8 @@ from unittest import mock
 
 from helpers import TempDirCase
 
-from cplugin import session
-from cplugin.project import Project
+from foreman import session
+from foreman.project import Project
 
 
 def dead_pid() -> int:
@@ -117,11 +117,11 @@ class SessionTest(TempDirCase):
     def test_resolve_cli_session_prefers_env_then_process(self):
         self.make_session("by-env", None)
         self.make_session("by-pid", {**alive_meta(), "last_seen_at": 5})
-        with mock.patch.dict(os.environ, {"CPLUGIN_SESSION_ID": "by-env", "CPLUGIN_AGENT_PID": str(os.getpid())}):
+        with mock.patch.dict(os.environ, {"FOREMAN_SESSION_ID": "by-env", "FOREMAN_AGENT_PID": str(os.getpid())}):
             self.assertEqual(session.resolve_cli_session(self.project), "by-env")
-        with mock.patch.dict(os.environ, {"CPLUGIN_SESSION_ID": "missing", "CPLUGIN_AGENT_PID": str(os.getpid())}):
+        with mock.patch.dict(os.environ, {"FOREMAN_SESSION_ID": "missing", "FOREMAN_AGENT_PID": str(os.getpid())}):
             self.assertEqual(session.resolve_cli_session(self.project), "by-pid")
-        with mock.patch.dict(os.environ, {"CPLUGIN_SESSION_ID": "", "CPLUGIN_AGENT_PID": "none"}):
+        with mock.patch.dict(os.environ, {"FOREMAN_SESSION_ID": "", "FOREMAN_AGENT_PID": "none"}):
             self.assertIsNone(session.resolve_cli_session(self.project))
 
     def test_find_agent_pid_walks_up_to_claude(self):

@@ -4,7 +4,7 @@ import sys
 
 from helpers import PLUGIN_ROOT, TempDirCase
 
-from cplugin.mindmap import CONTEXT_LIMIT, MIND_MAP_BUDGET
+from foreman.mindmap import CONTEXT_LIMIT, MIND_MAP_BUDGET
 
 
 class SessionStartTest(TempDirCase):
@@ -21,13 +21,13 @@ class SessionStartTest(TempDirCase):
     def test_silent_outside_a_project(self):
         result = self.run_hook("session-start", self.payload())
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
-        self.assertFalse((self.project_dir / ".cplugin").exists())
+        self.assertFalse((self.project_dir / ".foreman").exists())
 
     def test_stub_map_asks_for_mindmap(self):
         self.init_project()
         text = self.context(self.run_hook("session-start", self.payload()))
         self.assertIn("still the empty template", text)
-        self.assertIn("/cplugin:mindmap", text)
+        self.assertIn("/foreman:mindmap", text)
 
     def test_loads_real_map_from_a_subdirectory(self):
         self.init_project()
@@ -51,15 +51,15 @@ class SessionStartTest(TempDirCase):
         self.init_project()
         env_file = self.tmp / "env"
         self.context(self.run_hook("session-start", self.payload(), CLAUDE_ENV_FILE=str(env_file)))
-        self.assertEqual(env_file.read_text(), "export CPLUGIN_SESSION_ID=sess-1\n")
-        meta = json.loads((self.project_dir / ".cplugin/sessions/sess-1/meta.json").read_text())
+        self.assertEqual(env_file.read_text(), "export FOREMAN_SESSION_ID=sess-1\n")
+        meta = json.loads((self.project_dir / ".foreman/sessions/sess-1/meta.json").read_text())
         self.assertEqual(meta["last_source"], "startup")
 
     def test_bad_session_id_is_not_used_as_a_path(self):
         self.init_project()
         text = self.context(self.run_hook("session-start", self.payload(session_id="../../evil")))
         self.assertIn("no usable session_id", text)
-        self.assertEqual(list((self.project_dir / ".cplugin/sessions").iterdir()), [])
+        self.assertEqual(list((self.project_dir / ".foreman/sessions").iterdir()), [])
 
     def test_restores_deleted_launcher(self):
         self.init_project()

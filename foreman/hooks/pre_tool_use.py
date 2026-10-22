@@ -1,13 +1,13 @@
 """PreToolUse: stop work from bypassing the task system and the roles.
 
 - Code edits need an active task.
-- While a task is active, each role writes only what it owns (cplugin.roles):
+- While a task is active, each role writes only what it owns (foreman.roles):
   MAIN the task.md and the mind map, the worker code, the tester tests.
-- Only `tasks new` creates a task.md; session state and .cplugin/ belong to
+- Only `tasks new` creates a task.md; session state and .foreman/ belong to
   the CLI and the main agent; sub-agents do not run the `tasks` CLI.
 - The active task's gates are checked one at a time: 3+ in one write is
   blocked, 2 is warned about, and a check with no outcome written is pointed out.
-- cplugin agents are started only for an active task, with the model from
+- foreman agents are started only for an active task, with the model from
   config.toml and in the project's own directory.
 - Before a Bash call, the git status is snapshotted for the check that runs after it.
 
@@ -37,25 +37,25 @@ To resume an existing task: .claude/bin/tasks work <N> (`.claude/bin/tasks list`
 
 MANUAL_TASK = ("Only `.claude/bin/tasks new <type> <name>` creates task files: it numbers them "
                "and fills in the template.")
-SESSION_STATE = ("Session state under .cplugin/sessions/ is managed by the hooks and the "
+SESSION_STATE = ("Session state under .foreman/sessions/ is managed by the hooks and the "
                  "`.claude/bin/tasks` CLI. Use the CLI.")
 TOO_MANY = ("You checked {n} gates in one edit. Work gate by gate: do one gate's work, then "
             "check it and write its outcome on the same line.")
 SUBAGENT_TASK_FILE = ("Only the main agent edits task.md and checks gates. Put your results in "
                       "your final report; the main agent records them.")
-SUBAGENT_PLUGIN_FILES = ("{rel} is cplugin configuration or state, which only the main agent "
+SUBAGENT_PLUGIN_FILES = ("{rel} is foreman configuration or state, which only the main agent "
                          "changes. Mention what should change in your final report.")
 SUBAGENT_CLI = ("Only the main agent runs `.claude/bin/tasks {sub}`. Report back instead; "
                 "the main agent updates the task.")
 
-_MKDIR_TASK_RE = re.compile(r"\bmkdir\b[^;&|\n]*\.cplugin/tasks/")
+_MKDIR_TASK_RE = re.compile(r"\bmkdir\b[^;&|\n]*\.foreman/tasks/")
 # A redirect, tee or in-place edit whose target is a task.md or session state.
-_STATE_PATH = r"""['"]?[^\s;&|'"]*\.cplugin/(?:tasks/[^/\s'"]+/task\.md|sessions/)"""
+_STATE_PATH = r"""['"]?[^\s;&|'"]*\.foreman/(?:tasks/[^/\s'"]+/task\.md|sessions/)"""
 _SHELL_WRITE_RE = re.compile(
     rf"(?:>>?|\btee\b(?:\s+-a)?)\s*{_STATE_PATH}"
-    rf"|\b(?:sed|perl)\s+(?:-[a-zA-Z]*i\b|--in-place)[^;&|\n]*\.cplugin/(?:tasks/[^/\s]+/task\.md|sessions/)"
+    rf"|\b(?:sed|perl)\s+(?:-[a-zA-Z]*i\b|--in-place)[^;&|\n]*\.foreman/(?:tasks/[^/\s]+/task\.md|sessions/)"
 )
-FREEHAND_BY_AGENT = ("Only the user turns freehand on, by typing /cplugin:freehand. If the rules are "
+FREEHAND_BY_AGENT = ("Only the user turns freehand on, by typing /foreman:freehand. If the rules are "
                      "in the way, explain why and ask the user.")
 _FREEHAND_ON_RE = re.compile(r"(?:^|[;&|(]\s*|\s)(?:\S*/)?tasks(?:\.py)?\s+freehand\b(?!\s+off\b)")
 _TASKS_WRITE_RE = re.compile(
@@ -80,7 +80,7 @@ def handle(payload: dict, plugin_root: Path) -> dict | None:
     if tool == "Bash":
         return _check_bash(project, payload, role, state, directory)
     if tool == "Agent":
-        return _check_agent(project, payload, state)
+        return _check_agent(project, payload, state, directory)
     return None
 
 
@@ -89,7 +89,7 @@ def _check_write(project: Project, payload: dict, role: str, state: dict) -> dic
     if target is None or target[1] is None:
         return None  # no path, or outside the project
     abs_path, rel = target
-    if rel.startswith(".cplugin/sessions/"):
+    if rel.startswith(".foreman/sessions/"):
         return pre_tool_deny(SESSION_STATE)
     task_dir = task_for_path(project, rel)
     if task_dir is not None:
@@ -98,7 +98,7 @@ def _check_write(project: Project, payload: dict, role: str, state: dict) -> dic
         if role != roles.MAIN:
             return pre_tool_deny(SUBAGENT_TASK_FILE)
         return _check_gates(payload, task_dir, abs_path, state)
-    if rel.startswith((".cplugin/", ".claude/")):
+    if rel.startswith((".foreman/", ".claude/")):
         return pre_tool_deny(SUBAGENT_PLUGIN_FILES.format(rel=rel)) if role != roles.MAIN else None
     if state.get("freehand"):
         return None
@@ -146,7 +146,7 @@ def _verdict(delta: int, bare: list[str]) -> dict | None:
     if bare:
         quoted = "; ".join(f'"{text[:80]}"' for text in bare[:3])
         notes.append(f"Checked without an outcome: {quoted}. Append what happened on the same line.")
-    return context("PreToolUse", "[cplugin] " + " ".join(notes)) if notes else None
+    return context("PreToolUse", "[foreman] " + " ".join(notes)) if notes else None
 
 
 def _check_bash(project: Project, payload: dict, role: str, state: dict,
@@ -168,19 +168,38 @@ def _check_bash(project: Project, payload: dict, role: str, state: dict,
     return None
 
 
-def _check_agent(project: Project, payload: dict, state: dict) -> dict | None:
+def _check_agent(project: Project, payload: dict, state: dict, directory: Path | None) -> dict | None:
     tool_input = payload.get("tool_input") or {}
     role = roles.role_of({"agent_type": tool_input.get("subagent_type") or ""})
     if role not in (roles.WORKER, roles.TESTER):
         return None
     if not session.active_task(state):
-        return pre_tool_deny(f"cplugin:{role} works on a step of the active task, and no task is "
+        return pre_tool_deny(f"foreman:{role} works on a step of the active task, and no task is "
                              f"active. Activate one with `.claude/bin/tasks work <N>` first.")
     if tool_input.get("isolation"):
-        return pre_tool_deny(f"Start cplugin:{role} without `isolation`: in a separate worktree "
+        return pre_tool_deny(f"Start foreman:{role} without `isolation`: in a separate worktree "
                              f"it cannot see the session's active task, so every write would be blocked.")
-    wanted = str(config.load_or_defaults(project).get("roles", {}).get(role, {}).get("model") or "")
+    cfg = config.load_or_defaults(project)
+    wanted = str(cfg.get("roles", {}).get(role, {}).get("model") or "")
     if wanted in config.MODEL_ALIASES and tool_input.get("model") != wanted:
-        return pre_tool_deny(f"Start cplugin:{role} with model '{wanted}' (roles.{role}.model in "
-                             f".cplugin/config.toml): pass model=\"{wanted}\" to the Agent tool.")
+        return pre_tool_deny(f"Start foreman:{role} with model '{wanted}' (roles.{role}.model in "
+                             f".foreman/config.toml): pass model=\"{wanted}\" to the Agent tool.")
+    if role == roles.WORKER and directory is not None:
+        return _check_worker_limit(cfg, directory)
+    return None
+
+
+def _check_worker_limit(cfg: dict, directory: Path) -> dict | None:
+    """At most roles.worker.max_parallel workers at once, counting the starts
+    approved a moment ago whose agents are not recorded yet."""
+    limit = cfg.get("roles", {}).get("worker", {}).get("max_parallel", 1)
+    limit = limit if isinstance(limit, int) and limit >= 1 else 1
+    with agents.spawn_lock(directory):
+        running = [r for r in agents.running_subagents(directory) if r.get("role") == roles.WORKER]
+        if len(running) + agents.pending_count(directory, roles.WORKER) >= limit:
+            return pre_tool_deny(
+                f"roles.worker.max_parallel is {limit}, and {limit} worker(s) are already running. "
+                "Wait for a worker's report (it arrives as a notification) before starting another, "
+                "or raise roles.worker.max_parallel in .foreman/config.toml if the steps are independent.")
+        agents.add_pending(directory, roles.WORKER)
     return None

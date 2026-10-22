@@ -34,7 +34,7 @@ class NoTaskTest(ProjectCase):
 
     def test_allows_docs_data_and_plugin_files(self):
         for rel in ("README.md", "assets/levels.json", "mindmap/combat.md", "MIND_MAP.md",
-                    ".claude/settings.json", ".cplugin/config.toml", "scripts/notes.md"):
+                    ".claude/settings.json", ".foreman/config.toml", "scripts/notes.md"):
             self.assertIsNone(self.write(rel), rel)
 
     def test_extensionless_script_with_shebang_is_code(self):
@@ -45,12 +45,12 @@ class NoTaskTest(ProjectCase):
         self.assertIsNone(self.write("NOTES"))
 
     def test_extra_code_extensions_from_config(self):
-        config = self.project_dir / ".cplugin" / "config.toml"
+        config = self.project_dir / ".foreman" / "config.toml"
         config.write_text(config.read_text().replace("extra_code_extensions = []", 'extra_code_extensions = ["tscn"]'))
         self.assertEqual(decision(self.write("scenes/main.tscn")), "deny")
 
     def test_broken_config_still_enforces(self):
-        (self.project_dir / ".cplugin" / "config.toml").write_text("[[[broken")
+        (self.project_dir / ".foreman" / "config.toml").write_text("[[[broken")
         self.assertEqual(decision(self.write("src/game.ts")), "deny")
 
     def test_outside_the_project_is_not_policed(self):
@@ -59,7 +59,7 @@ class NoTaskTest(ProjectCase):
     def test_active_task_lets_the_worker_write_code(self):
         self.new_task()
         self.activate()
-        self.assertIsNone(self.write("src/game.ts", agent_id="w1", agent_type="cplugin:worker"))
+        self.assertIsNone(self.write("src/game.ts", agent_id="w1", agent_type="foreman:worker"))
 
     def test_unknown_session_fails_closed(self):
         out = self.write("src/game.ts", session_id="never-registered")
@@ -68,28 +68,28 @@ class NoTaskTest(ProjectCase):
 
 class TaskFileTest(ProjectCase):
     def test_blocks_creating_task_md_by_hand(self):
-        path = self.project_dir / ".cplugin" / "tasks" / "009-feature-x" / "task.md"
+        path = self.project_dir / ".foreman" / "tasks" / "009-feature-x" / "task.md"
         out = self.hook_json("pre-tool-use", self.payload("Write", {"file_path": str(path), "content": "# x"}))
         self.assertEqual(decision(out), "deny")
         self.assertIn("tasks new", reason(out))
 
     def test_blocks_writing_session_state(self):
-        path = self.project_dir / ".cplugin" / "sessions" / "sess-1" / "state.json"
+        path = self.project_dir / ".foreman" / "sessions" / "sess-1" / "state.json"
         out = self.hook_json("pre-tool-use", self.payload("Write", {"file_path": str(path), "content": "{}"}))
         self.assertEqual(decision(out), "deny")
 
     def test_blocks_shell_shortcuts(self):
-        for command in ("mkdir -p .cplugin/tasks/005-feature-x",
-                        "echo '- [x] a' >> .cplugin/tasks/001-feature-x/task.md",
-                        "cat x | tee .cplugin/tasks/001-feature-x/task.md",
-                        "sed -i '' 's/- \\[ \\]/- [x]/g' .cplugin/tasks/001-feature-x/task.md",
-                        'echo \'{"task": 3}\' > .cplugin/sessions/sess-1/state.json'):
+        for command in ("mkdir -p .foreman/tasks/005-feature-x",
+                        "echo '- [x] a' >> .foreman/tasks/001-feature-x/task.md",
+                        "cat x | tee .foreman/tasks/001-feature-x/task.md",
+                        "sed -i '' 's/- \\[ \\]/- [x]/g' .foreman/tasks/001-feature-x/task.md",
+                        'echo \'{"task": 3}\' > .foreman/sessions/sess-1/state.json'):
             out = self.hook_json("pre-tool-use", self.payload("Bash", {"command": command}))
             self.assertEqual(decision(out), "deny", command)
 
     def test_allows_reading_task_files_in_the_shell(self):
-        for command in ("cat .cplugin/tasks/001-feature-x/task.md", "ls .cplugin/tasks",
-                        ".claude/bin/tasks new feature x --request -", "git add .cplugin/tasks"):
+        for command in ("cat .foreman/tasks/001-feature-x/task.md", "ls .foreman/tasks",
+                        ".claude/bin/tasks new feature x --request -", "git add .foreman/tasks"):
             self.assertIsNone(self.hook_json("pre-tool-use", self.payload("Bash", {"command": command})), command)
 
 

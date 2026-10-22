@@ -1,21 +1,31 @@
-"""Project discovery and the fixed layout of a cplugin project."""
+"""Project discovery and the fixed layout of a foreman project."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 
-STATE_DIR = ".cplugin"
+STATE_DIR = ".foreman"
+LEGACY_STATE_DIR = ".cplugin"   # the layout from before the plugin was named foreman
 CONFIG_FILE = "config.toml"
 MIND_MAP_FILE = "MIND_MAP.md"
 MINDMAP_DIR = "mindmap"
 
 
 def find_project_root(start: str | Path) -> Path | None:
-    """Walk up from `start` to the first directory holding .cplugin/config.toml."""
+    """Walk up from `start` to the first directory holding .foreman/config.toml."""
     path = Path(start).resolve()
     for directory in (path, *path.parents):
         if (directory / STATE_DIR / CONFIG_FILE).is_file():
+            return directory
+    return None
+
+
+def find_legacy_root(start: str | Path) -> Path | None:
+    """The first directory above `start` still in the pre-rename layout (.cplugin/)."""
+    path = Path(start).resolve()
+    for directory in (path, *path.parents):
+        if (directory / LEGACY_STATE_DIR / CONFIG_FILE).is_file() and not (directory / STATE_DIR).exists():
             return directory
     return None
 

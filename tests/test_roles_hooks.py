@@ -1,10 +1,12 @@
 import json
+import os
 import subprocess
+import time
 
 from helpers import SESSION, ProjectCase
 
-WORKER = {"agent_id": "w1", "agent_type": "cplugin:worker"}
-TESTER = {"agent_id": "t1", "agent_type": "cplugin:tester"}
+WORKER = {"agent_id": "w1", "agent_type": "foreman:worker"}
+TESTER = {"agent_id": "t1", "agent_type": "foreman:tester"}
 OTHER = {"agent_id": "g1", "agent_type": "general-purpose"}
 
 
@@ -37,8 +39,8 @@ class WriteRulesTest(ActiveTaskCase):
     def test_main_delegates_code_and_tests(self):
         out = self.write("src/game.ts")
         self.assertEqual(decision(out), "deny")
-        self.assertIn("subagent_type 'cplugin:worker'", message(out))
-        self.assertIn("cplugin:tester", message(self.write("tests/game.test.ts")))
+        self.assertIn("subagent_type 'foreman:worker'", message(out))
+        self.assertIn("foreman:tester", message(self.write("tests/game.test.ts")))
 
     def test_each_role_writes_what_it_owns(self):
         self.assertIsNone(self.write("src/game.ts", **WORKER))
@@ -55,11 +57,11 @@ class WriteRulesTest(ActiveTaskCase):
         out = self.pre("Edit", {"file_path": task_md, "old_string": "- [ ]", "new_string": "- [x]"}, **WORKER)
         self.assertEqual(decision(out), "deny")
         self.assertIn("Only the main agent edits task.md", message(out))
-        self.assertEqual(decision(self.write(".cplugin/config.toml", **TESTER)), "deny")
-        self.assertIsNone(self.write(".cplugin/config.toml"))
+        self.assertEqual(decision(self.write(".foreman/config.toml", **TESTER)), "deny")
+        self.assertIsNone(self.write(".foreman/config.toml"))
 
     def test_older_config_without_roles_gets_the_defaults(self):
-        config = self.project_dir / ".cplugin" / "config.toml"
+        config = self.project_dir / ".foreman" / "config.toml"
         config.write_text("[tests]\ncommand = \"npm test\"\n")
         self.assertIsNone(self.write("src/game.ts", **WORKER))
         self.assertEqual(decision(self.write("tests/game.test.ts", **WORKER)), "deny")
@@ -72,21 +74,21 @@ class CliAndAgentRulesTest(ActiveTaskCase):
         self.assertIsNone(self.pre("Bash", {"command": ".claude/bin/tasks status"}, **WORKER))
         self.assertIsNone(self.pre("Bash", {"command": "npm test"}, **TESTER))
 
-    def test_cplugin_agents_need_the_configured_model(self):
-        out = self.pre("Agent", {"subagent_type": "cplugin:worker", "prompt": "x"})
+    def test_foreman_agents_need_the_configured_model(self):
+        out = self.pre("Agent", {"subagent_type": "foreman:worker", "prompt": "x"})
         self.assertEqual(decision(out), "deny")
         self.assertIn("model=\"opus\"", message(out))
-        self.assertIsNone(self.pre("Agent", {"subagent_type": "cplugin:worker", "model": "opus", "prompt": "x"}))
-        self.assertIsNone(self.pre("Agent", {"subagent_type": "cplugin:tester", "model": "sonnet", "prompt": "x"}))
+        self.assertIsNone(self.pre("Agent", {"subagent_type": "foreman:worker", "model": "opus", "prompt": "x"}))
+        self.assertIsNone(self.pre("Agent", {"subagent_type": "foreman:tester", "model": "sonnet", "prompt": "x"}))
         self.assertIsNone(self.pre("Agent", {"subagent_type": "general-purpose", "prompt": "x"}))
 
-    def test_cplugin_agents_refuse_worktree_isolation(self):
-        out = self.pre("Agent", {"subagent_type": "cplugin:tester", "model": "sonnet", "isolation": "worktree"})
+    def test_foreman_agents_refuse_worktree_isolation(self):
+        out = self.pre("Agent", {"subagent_type": "foreman:tester", "model": "sonnet", "isolation": "worktree"})
         self.assertEqual(decision(out), "deny")
 
-    def test_cplugin_agents_need_an_active_task(self):
+    def test_foreman_agents_need_an_active_task(self):
         self.tasks_ok("stop")
-        out = self.pre("Agent", {"subagent_type": "cplugin:worker", "model": "opus"})
+        out = self.pre("Agent", {"subagent_type": "foreman:worker", "model": "opus"})
         self.assertIn("no task is active", message(out))
 
 
@@ -127,7 +129,7 @@ class BashCheckTest(ActiveTaskCase):
 
     def test_main_agent_gets_the_gate_echo_and_the_violation(self):
         note = self.bash("b5", self.touch("src/new.ts"))
-        self.assertIn("[cplugin] Task 001", note)
+        self.assertIn("[foreman] Task 001", note)
         self.assertIn("as the main agent you changed src/new.ts", note)
 
     def test_parallel_tool_writes_are_not_blamed_on_bash(self):
@@ -137,7 +139,7 @@ class BashCheckTest(ActiveTaskCase):
         self.assertEqual(self.bash("b6", worker_edits_meanwhile, **TESTER), "")
 
     def test_project_inside_a_larger_repository(self):
-        from cplugin import bashcheck
+        from foreman import bashcheck
         outer = self.tmp / "outer"
         inner = outer / "games" / "proj"
         inner.mkdir(parents=True)
@@ -149,7 +151,7 @@ class BashCheckTest(ActiveTaskCase):
 
 class SubagentHooksTest(ActiveTaskCase):
     def agent_file(self, key: str) -> dict:
-        return json.loads((self.project_dir / ".cplugin/sessions" / SESSION / "agents" / f"{key}.json").read_text())
+        return json.loads((self.project_dir / ".foreman/sessions" / SESSION / "agents" / f"{key}.json").read_text())
 
     def start(self, **who) -> str:
         out = self.hook_json("subagent-start", {"session_id": SESSION, "cwd": str(self.project_dir), **who})
@@ -161,7 +163,7 @@ class SubagentHooksTest(ActiveTaskCase):
         self.assertIn("You may write: code files under **", brief)
         self.assertIn("tests (tests/**", brief)
         self.assertIn("You are the tester", self.start(**TESTER))
-        self.assertIn("only cplugin:worker writes code", self.start(**OTHER))
+        self.assertIn("only foreman:worker writes code", self.start(**OTHER))
         self.assertEqual(self.agent_file("w1")["status"], "running")
 
     def test_stop_marks_done(self):
@@ -171,7 +173,7 @@ class SubagentHooksTest(ActiveTaskCase):
 
     def test_sub_agent_calls_do_not_count_as_main_turn(self):
         self.post("Write", {"file_path": str(self.project_dir / "src/a.ts")}, **WORKER)
-        counters_path = self.project_dir / ".cplugin/sessions" / SESSION / "counters.json"
+        counters_path = self.project_dir / ".foreman/sessions" / SESSION / "counters.json"
         counters = json.loads(counters_path.read_text()) if counters_path.exists() else {}
         self.assertEqual(counters.get("turn_writes", 0), 0)
         self.assertEqual(self.agent_file("w1")["last_action"]["tool"], "Write")
@@ -198,7 +200,7 @@ class ConfigCliTest(ProjectCase):
     def test_check_warns_and_errors(self):
         out = self.tasks_ok("config", "check")
         self.assertIn("WARNING: tests.command is empty", out)
-        config = self.project_dir / ".cplugin" / "config.toml"
+        config = self.project_dir / ".foreman" / "config.toml"
         config.write_text(config.read_text().replace("tests_first = true", "tests_first = \"yes\""))
         result = self.run_tasks("config", "check")
         self.assertEqual(result.returncode, 1)
@@ -207,8 +209,8 @@ class ConfigCliTest(ProjectCase):
 
 class ViolationsSectionTest(ProjectCase):
     def test_appends_inside_the_section_or_creates_it(self):
-        from cplugin.project import Project
-        from cplugin.task import find_task, record_violation
+        from foreman.project import Project
+        from foreman.task import find_task, record_violation
         self.new_task()
         task = find_task(Project(self.project_dir), 1)
         record_violation(task, "first")
@@ -217,3 +219,59 @@ class ViolationsSectionTest(ProjectCase):
         task.path.write_text("# 001\n\n## Parked\nnothing\n")
         record_violation(task, "third")
         self.assertTrue(task.text().endswith("## Parked\nnothing\n\n## Violations\n- third\n"))
+
+
+class WorkerLimitTest(ActiveTaskCase):
+    def spawn(self, role: str = "worker", model: str = "opus") -> dict | None:
+        return self.pre("Agent", {"subagent_type": f"foreman:{role}", "model": model, "prompt": "x"})
+
+    def set_limit(self, limit: int) -> None:
+        config = self.project_dir / ".foreman" / "config.toml"
+        config.write_text(config.read_text().replace("max_parallel = 1", f"max_parallel = {limit}", 1))
+
+    def start(self, agent_id: str, role: str = "worker") -> None:
+        self.hook_json("subagent-start", {"session_id": SESSION, "cwd": str(self.project_dir),
+                                          "agent_id": agent_id, "agent_type": f"foreman:{role}"})
+
+    def stop(self, agent_id: str, role: str = "worker") -> None:
+        self.hook_json("subagent-stop", {"session_id": SESSION, "cwd": str(self.project_dir),
+                                         "agent_id": agent_id, "agent_type": f"foreman:{role}"})
+
+    def test_one_worker_at_a_time_by_default(self):
+        self.assertIsNone(self.spawn())
+        self.start("w1")
+        out = self.spawn()
+        self.assertEqual(decision(out), "deny")
+        self.assertIn("max_parallel is 1", message(out))
+        self.assertIsNone(self.spawn("tester", "sonnet"))  # the limit is for workers
+        self.stop("w1")
+        self.assertIsNone(self.spawn())
+
+    def test_two_starts_in_one_message_count_before_either_agent_runs(self):
+        self.assertIsNone(self.spawn())
+        self.assertEqual(decision(self.spawn()), "deny")
+
+    def test_a_higher_limit(self):
+        self.set_limit(2)
+        self.assertIsNone(self.spawn())
+        self.assertIsNone(self.spawn())
+        self.assertEqual(decision(self.spawn()), "deny")
+        self.start("w1")
+        self.start("w2")
+        self.assertEqual(decision(self.spawn()), "deny")
+        self.stop("w2")
+        self.assertIsNone(self.spawn())
+
+    def test_a_start_that_never_arrived_expires(self):
+        self.assertIsNone(self.spawn())
+        pending = self.project_dir / ".foreman/sessions" / SESSION / "agents" / "pending"
+        old = time.time() - 600
+        for path in pending.iterdir():
+            os.utime(path, (old, old))
+        self.assertIsNone(self.spawn())
+
+    def test_config_check_rejects_a_bad_limit(self):
+        self.set_limit(0)
+        result = self.run_tasks("config", "check")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("roles.worker.max_parallel must be a whole number", result.stdout)

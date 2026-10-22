@@ -106,7 +106,7 @@ def handle(payload: dict, plugin_root: Path) -> dict | None:
         if task is not None and not state.get("freehand"):
             notes.insert(0, _gate_echo(project, task, payload, counters))
         elif num:
-            notes.insert(0, f"[cplugin] The active task {num:03d} no longer exists. "
+            notes.insert(0, f"[foreman] The active task {num:03d} no longer exists. "
                             "Run `.claude/bin/tasks list`.")
         session.write_counters(directory, counters)
     return context("PostToolUse", "\n".join(notes)) if notes else None
@@ -117,7 +117,7 @@ def _bash_violations(project: Project, directory: Path, task: Task, role: str,
     cfg = config.load_or_defaults(project)
     notes = []
     for rel in bashcheck.bash_changes(directory, project.root, before):
-        if rel.startswith(".cplugin/"):
+        if rel.startswith(".foreman/"):
             continue  # the CLI's own state and task files
         reason = roles.write_violation(role, rel, project.root / rel, cfg)
         if reason is None:
@@ -126,7 +126,7 @@ def _bash_violations(project: Project, directory: Path, task: Task, role: str,
         stamp = time.strftime("%Y-%m-%d %H:%M")
         record_violation(task, f"{stamp} {role} changed `{rel}` through Bash (owner: {owner})")
         who = "main agent" if role == roles.MAIN else role
-        notes.append(f"[cplugin] Role violation: as the {who} you changed {rel} through Bash, "
+        notes.append(f"[foreman] Role violation: as the {who} you changed {rel} through Bash, "
                      f"and it belongs to the {owner}. Undo your change to that file and leave it "
                      f"to its owner. This was recorded in {task.path.name}.")
     return notes
@@ -136,14 +136,14 @@ def _gate_echo(project: Project, task: Task, payload: dict, counters: dict) -> s
     all_gates = task.gates()
     gate = gates.first_open(all_gates)
     if gate is None:
-        return f"[cplugin] Task {task.label}: every gate is checked. Run `.claude/bin/tasks done`."
+        return f"[foreman] Task {task.label}: every gate is checked. Run `.claude/bin/tasks done`."
     done, total = gates.progress(all_gates)
     key = f"{task.num}:{gate.line}:{gate.text}"
     calls = counters.get("gate_calls", 0) + 1 if counters.get("gate_key") == key else 1
     counters.update(gate_key=key, gate_calls=calls)
 
     rel = task.path.relative_to(project.root)
-    lines = [f"[cplugin] Task {task.label} · gate {done + 1}/{total} · {rel}:{gate.line} "
+    lines = [f"[foreman] Task {task.label} · gate {done + 1}/{total} · {rel}:{gate.line} "
              f"[{gate.section}] {gate.text[:MAX_GATE_TEXT]}"]
     kind = classify(project, payload, config.load_or_defaults(project))
     if calls >= NUDGE_AFTER and kind in QUESTIONS:

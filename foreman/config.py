@@ -1,4 +1,4 @@
-"""Reading .cplugin/config.toml, with defaults for everything left out."""
+"""Reading .foreman/config.toml, with defaults for everything left out."""
 
 from __future__ import annotations
 
@@ -103,6 +103,9 @@ def check(cfg: dict) -> list[tuple[str, str]]:
         if role != "main" and model not in MODEL_ALIASES:
             found.append(("WARNING", f"roles.{role}.model is {model!r}; the Agent tool only takes "
                                      f"{', '.join(MODEL_ALIASES)}, so it cannot be enforced"))
+    max_parallel = cfg.get("roles", {}).get("worker", {}).get("max_parallel")
+    if not isinstance(max_parallel, int) or isinstance(max_parallel, bool) or max_parallel < 1:
+        found.append(("ERROR", "roles.worker.max_parallel must be a whole number, 1 or more"))
     for key in ("code_extensions", "extra_code_extensions", "code_dirs"):
         if not _is_str_list(cfg.get("files", {}).get(key)):
             found.append(("ERROR", f"files.{key} must be a list of strings"))
