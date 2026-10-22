@@ -16,6 +16,10 @@ A Claude Code plugin for task-gated, multi-agent work on a codebase:
 - **A live board.** Run `.claude/bin/board --watch` in a second terminal to see the active
   task, its current gate, and what the main agent, the worker and the tester are doing.
   `/foreman:board` prints it once in the chat.
+- **A status line.** Under the prompt: the model and effort, the context window, the five-hour
+  rate limit, the session's weighted tokens (sub-agents included) and its cost; below it, in a
+  foreman project, the active task, its gate and the sub-agents working now. `/foreman:init`
+  sets it in the project's `.claude/settings.local.json` unless the project already has one.
 - **Judges from other providers.** `tasks plan-review` and `tasks impl-review` have Codex
   and Antigravity (or a read-only Claude when neither is installed) review the plan and
   the code. They never see the conversation, run read-only, and a tamper check voids any

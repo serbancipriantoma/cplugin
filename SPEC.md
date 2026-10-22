@@ -308,6 +308,24 @@ Principles, learned from playbook's problems:
 - The width follows the terminal (50 to 100 columns); colors only on a terminal, never with `--no-color` or `NO_COLOR`.
 - `/foreman:board` prints the same board once, in the chat.
 
+### The status line
+
+A line under the prompt, plus a second one in a foreman project. It is a script the user wrote with a colleague (bash and `jq`), ported to Python so the plugin keeps no dependencies:
+
+```
+Opus 5.5 [xhigh] · 45k/1M · 5h 12% · 8.12M (↑3.02M ↓5.10M) · $1.23
+foreman · task 003 shout · gate 7/18 · worker ● Edit src/combat.ts
+```
+
+- **Line 1, in every project:** the model and its effort; the context window (green under 50%, yellow under 80%, red above); the five-hour rate limit (cyan, blue, then magenta); the session's weighted tokens, split into input and output; the session's cost. The weights follow the pricing ratios: per model response, input + 1.25 × cache writes + 0.1 × cache reads, and 5 × output.
+- **Weighted tokens count the sub-agents too.** They come from the main transcript and from the sub-agents' transcripts (`<session>/subagents/agent-*.jsonl`): in foreman most of the work is the worker's and the tester's. One response is written as several transcript lines that repeat its usage, the early ones with a partial output count, so each message counts once, with its last line. The original script summed every line (49 lines for 31 messages in one session) and never read the sub-agents' files.
+- **Percentages may carry a decimal** (the rate limit reports 23.5). The original compared them as integers, so 23.5% showed as "5h 0%" in the highest color. The rate limit is left out while Claude Code does not send it (before the first response, or without a subscription) instead of showing as 0%.
+- **Line 2, in a foreman project only:** the active task and its gate (or no active task), freehand, what MAIN waits for after `tasks pause`, and each sub-agent working now with its tool and target, read from the same records as the board.
+- **Where it comes from:** `.claude/bin/statusline` runs `bin/statusline.py`. `init` sets `statusLine` to `"$CLAUDE_PROJECT_DIR"/.claude/bin/statusline` in `.claude/settings.local.json` (personal, not committed) when neither project settings file sets one; a project that already sets one keeps it. In the project it takes the place of a status line set in `~/.claude/settings.json`, and the init report says so. `init` also makes sure git ignores `settings.local.json`.
+- **Verified with Claude Code 2.1.308:** the command runs through a shell, from the folder Claude Code started in, with `CLAUDE_PROJECT_DIR` set to that folder. Its stdin is the session's JSON (`model`, `effort`, `context_window`, `rate_limits`, `cost`, `transcript_path`, `session_id`, `workspace`); `used_percentage` is null and `rate_limits` absent until the first response.
+- It never fails the line: on an error it prints what it has. Reading a 43 MB transcript takes about 130 ms, so nothing is cached.
+- Plugins can also pin a line of their own through the hooks-module API (`$.ui.status`), but that API is early access and in TypeScript, and it is not known how older Claude Code versions treat a `hooks.json` that names a module. The `statusLine` command works in every version.
+
 ## 8. Freehand and sandbox
 
 - **`/foreman:freehand`** suspends the rules (no task needed for code, no roles, no Bash check, no held turns) until `tasks work <N>` or `tasks freehand off`. An active task is paused meanwhile. **Only the user turns it on**: the skill runs the CLI itself (a `!` command, which no hook intercepts; verified), and the PreToolUse hook refuses `tasks freehand` from every agent, the main one included. Ending it is allowed to anyone. When it ends, the commits made and the files changed since it began are appended to `.foreman/freehand.md` and summarized for the main agent, with a reminder to update the mind map. The banner, the main agent's context and the board show it while it is on. What stays enforced: tasks are created only by `tasks new`, session state belongs to the CLI, and sub-agents keep out of `.foreman/`.
@@ -331,7 +349,7 @@ foreman/
 │   └── run.py                  # single entry point for every hook
 ├── foreman/                    # the Python package: tasks CLI, config, roles, board, judges
 ├── templates/                  # task.md, step shapes, MIND_MAP.md, mindmap-module.md, CLAUDE.md, config.toml
-├── bin/                        # tasks.py, board.py, sandbox: entry points
+├── bin/                        # tasks.py, board.py, sandbox.py, statusline.py: entry points
 └── tests/                      # stdlib unittest; hooks tested with JSON payloads
 ```
 
@@ -348,8 +366,9 @@ project/
 │   ├── tasks/                  # committed: the history of decisions
 │   └── sessions/               # runtime state, gitignored
 └── .claude/
-    ├── bin/                    # tasks, board, sandbox
-    └── settings.json           # deny: TodoWrite, EnterPlanMode; playbook disabled here
+    ├── bin/                    # tasks, board, sandbox, statusline
+    ├── settings.json           # deny: TodoWrite, EnterPlanMode; playbook disabled here
+    └── settings.local.json     # personal, not committed: statusLine → .claude/bin/statusline
 ```
 
 `init` is idempotent: run again, it updates the plugin's sections and leaves everything else alone. In `config.toml` it changes only settings that still hold a default an older version wrote and a newer one replaced (for example the worker's paths); values the user changed are never touched. If the project is not a git repository, it suggests `git init`. `/foreman:init` ends by showing the `tasks start` overview, because a session that started before the setup never shows the session-start banner.
@@ -361,7 +380,7 @@ project/
 - ~~The exact form of `agent_type`~~ Confirmed in the documentation: `foreman:worker`, `foreman:tester`.
 - **`CLAUDE_PLUGIN_ROOT` does not exist in the model's Bash commands.** It is substituted only in skill text and in hooks. That is why the project gets launchers in `.claude/bin/`, rewritten at every session start (the path changes on upgrade).
 - **Plugin agents ignore `hooks` and `permissionMode` in their frontmatter.** All enforcement goes through `hooks/hooks.json`, which was the plan anyway.
-- **A plugin cannot ship `permissions.deny` or a status line through its settings.** That is why `init` writes into the project's `.claude/settings.json`.
+- **A plugin cannot ship `permissions.deny` or a status line through its settings.** That is why `init` writes into the project's `.claude/settings.json`, and the status line into `.claude/settings.local.json` (section 7).
 - **Bash cannot be stopped beforehand**, only detected afterwards (4.2).
 - **Coexisting with playbook**: playbook activates when it finds `.agent/tasks/`. We use `.foreman/`, so it stays inactive. `init` disables it in the project anyway (`enabledPlugins`), so Claude does not use its skills by mistake.
 - **We do not deny the `Agent` tool** (playbook denied `Task`, its former name). That would stop the sub-agents.
@@ -394,4 +413,4 @@ Each milestone comes with tests and is usable on its own.
 5. ✅ **Judges** (2026-10-22). Codex and agy seats, read-only containment, the tamper check, panel and single modes, the `claude -p` fallback, reports and quoted summaries, judges on the board. 142 tests, with stand-in CLIs (a guard makes the real ones unreachable from tests); verified with the real CLIs: on a plan with a planted mistake (a CommonJS interface in an ES-module project), Codex and Antigravity both flagged it as high, with file:line evidence, and found two real gaps besides, in 39 seconds in parallel.
 6. ✅ **Freehand and sandbox** (2026-10-22). `/foreman:freehand` (user only) and `tasks freehand off`, the freehand log, `.claude/bin/sandbox`. 158 tests; verified with `claude -p`: the skill turned freehand on, and Claude Code ran inside the sandbox with home and `.git` writes denied.
 
-After the plan (2026-10-22): the plugin was renamed from `cplugin` to **foreman** (projects move from `.cplugin/` to `.foreman/` on the next `/foreman:init`); `max_parallel` is enforced; containment works on Linux through bubblewrap, pending a run on a Linux machine with `docs/linux.md`.
+After the plan (2026-10-22): the plugin was renamed from `cplugin` to **foreman** (projects move from `.cplugin/` to `.foreman/` on the next `/foreman:init`); `max_parallel` is enforced; containment works on Linux through bubblewrap, pending a run on a Linux machine with `docs/linux.md`. Later the same day: `/foreman:init` ends with the `tasks start` overview, and the status line (section 7) replaced the user's bash script; 191 tests.

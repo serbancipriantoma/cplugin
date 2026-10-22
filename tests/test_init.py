@@ -4,7 +4,7 @@ import tomllib
 
 from helpers import PLUGIN_ROOT, TempDirCase
 
-from foreman.init import BLOCK_BEGIN, merge_claude_md, merge_settings
+from foreman.init import BLOCK_BEGIN, STATUS_LINE, merge_claude_md, merge_settings
 
 
 class InitTest(TempDirCase):
@@ -13,7 +13,8 @@ class InitTest(TempDirCase):
         p = self.project_dir
         for rel in (".foreman/config.toml", ".foreman/.gitignore", ".foreman/tasks",
                     ".foreman/sessions", "mindmap", "MIND_MAP.md", "CLAUDE.md",
-                    ".claude/settings.json", ".claude/bin/tasks", ".claude/bin/board", ".claude/bin/sandbox",
+                    ".claude/settings.json", ".claude/settings.local.json", ".claude/bin/tasks",
+                    ".claude/bin/board", ".claude/bin/sandbox", ".claude/bin/statusline",
                     ".claude/bin/.gitignore"):
             self.assertTrue((p / rel).exists(), rel)
         self.assertIn("# MIND_MAP — Portfolio", (p / "MIND_MAP.md").read_text())
@@ -91,6 +92,48 @@ class InitTest(TempDirCase):
     def test_warns_outside_git(self):
         result = self.run_tasks("init")
         self.assertIn("WARNING: not a git repository", result.stdout)
+
+    def test_points_local_settings_at_the_status_line(self):
+        result = self.run_tasks("init", session=None)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("created: .claude/settings.local.json (statusLine: foreman's status line)\n", result.stdout)
+        local = json.loads((self.project_dir / ".claude" / "settings.local.json").read_text())
+        self.assertEqual(local["statusLine"], STATUS_LINE)
+        # Claude Code runs the command through a shell, with CLAUDE_PROJECT_DIR set.
+        shown = subprocess.run(["sh", "-c", local["statusLine"]["command"]], input="{}", capture_output=True,
+                               text=True, env=self.env(NO_COLOR="1", CLAUDE_PROJECT_DIR=str(self.project_dir)))
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertEqual(shown.stdout, "unknown · 0/200k · 0 (↑0 ↓0) · $0.00\n")
+
+    def test_says_when_it_replaces_the_users_status_line(self):
+        (self.config_dir / "settings.json").write_text(json.dumps({"statusLine": {"type": "command",
+                                                                                  "command": "mine"}}))
+        result = self.run_tasks("init", session=None)
+        self.assertIn("in this project it replaces the one in ~/.claude/settings.json", result.stdout)
+
+    def test_keeps_a_status_line_the_project_sets(self):
+        mine = {"type": "command", "command": "my-line"}
+        for name in ("settings.json", "settings.local.json"):
+            project = self.tmp / name.replace(".", "-")
+            (project / ".claude").mkdir(parents=True)
+            (project / ".claude" / name).write_text(json.dumps({"statusLine": mine}))
+            result = self.run_tasks("init", cwd=project, session=None)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("unchanged: statusLine (the project sets its own", result.stdout)
+            self.assertEqual(json.loads((project / ".claude" / name).read_text())["statusLine"], mine)
+        self.assertFalse((self.tmp / "settings-json" / ".claude" / "settings.local.json").exists())
+
+    def test_keeps_local_settings_out_of_git(self):
+        # Without the developer's own excludes, which may already ignore the file.
+        env = {"GIT_CONFIG_GLOBAL": "/dev/null", "XDG_CONFIG_HOME": str(self.tmp / "xdg")}
+        subprocess.run(["git", "init", "-q", str(self.project_dir)], check=True, env=self.env(**env))
+        result = self.run_tasks("init", session=None, extra_env=env)
+        self.assertIn("created: .claude/.gitignore (keeps settings.local.json out of git)", result.stdout)
+        ignored = subprocess.run(["git", "-C", str(self.project_dir), "check-ignore", "-q",
+                                  ".claude/settings.local.json"], env=self.env(**env))
+        self.assertEqual(ignored.returncode, 0)
+        again = self.run_tasks("init", session=None, extra_env=env)
+        self.assertNotIn(".claude/.gitignore", again.stdout)
 
 
 OLD_CONFIG = """[workflow]

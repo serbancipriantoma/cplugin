@@ -69,3 +69,7 @@ class Project:
     @property
     def settings_path(self) -> Path:
         return self.root / ".claude" / "settings.json"
+
+    @property
+    def local_settings_path(self) -> Path:
+        return self.root / ".claude" / "settings.local.json"

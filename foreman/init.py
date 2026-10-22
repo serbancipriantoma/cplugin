@@ -16,6 +16,8 @@ from .project import LEGACY_STATE_DIR, STATE_DIR, Project
 DENIED_TOOLS = ["TodoWrite", "EnterPlanMode"]
 # Plugins switched off in foreman projects, unless the project already decided.
 CONFLICTING_PLUGINS = ("playbook",)
+# Set in the personal settings.local.json, unless the project already has a status line.
+STATUS_LINE = {"type": "command", "command": '"$CLAUDE_PROJECT_DIR"/.claude/bin/statusline', "padding": 0}
 
 BLOCK_BEGIN = "<!-- foreman:begin"
 BLOCK_END = "<!-- foreman:end -->"
@@ -57,14 +59,25 @@ def merge_claude_md(existing: str | None, block: str, project_name: str) -> str:
     return existing.rstrip("\n") + "\n\n" + block + "\n"
 
 
+def _claude_config_dir() -> Path:
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+
+
 def _installed_plugin_keys() -> list[str]:
-    config_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
     try:
-        data = json.loads((config_dir / "plugins" / "installed_plugins.json").read_text(encoding="utf-8"))
+        data = json.loads((_claude_config_dir() / "plugins" / "installed_plugins.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
     plugins = data.get("plugins") if isinstance(data, dict) else None
     return sorted(plugins) if isinstance(plugins, dict) else []
+
+
+def _user_has_status_line() -> bool:
+    try:
+        data = json.loads((_claude_config_dir() / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and "statusLine" in data
 
 
 def merge_settings(settings: dict, installed: list[str]) -> dict:
@@ -81,6 +94,49 @@ def merge_settings(settings: dict, installed: list[str]) -> dict:
 
 def _rel(project: Project, path: Path) -> str:
     return str(path.relative_to(project.root))
+
+
+def _read_settings(project: Project, path: Path, report: Report) -> dict | None:
+    """{} for a missing file; None, with a warning, for one that is not a JSON object."""
+    if not path.is_file():
+        return {}
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        settings = None
+    if not isinstance(settings, dict):
+        report.warnings.append(f"{_rel(project, path)} is not a JSON object; left untouched")
+        return None
+    return settings
+
+
+def _set_status_line(project: Project, shared: dict | None, report: Report) -> None:
+    """Point the personal settings.local.json at foreman's status line, unless
+    either project settings file already sets one, and keep that file out of git."""
+    path = project.local_settings_path
+    rel = _rel(project, path)
+    local = _read_settings(project, path, report)
+    if local is None or shared is None:
+        return
+    if local.get("statusLine") == STATUS_LINE:
+        report.record("unchanged", f"{rel} (foreman's statusLine)")
+    elif "statusLine" in shared or "statusLine" in local:
+        report.record("unchanged", "statusLine (the project sets its own; foreman's is not used)")
+    else:
+        local["statusLine"] = STATUS_LINE
+        note = "statusLine: foreman's status line"
+        if _user_has_status_line():
+            note += "; in this project it replaces the one in ~/.claude/settings.json"
+        report.record(write_if_changed(path, json.dumps(local, indent=2) + "\n"), f"{rel} ({note})")
+
+    if (path.is_file() and gitutil.is_repo(project.root)
+            and gitutil.git(project.root, "check-ignore", "-q", rel) is None):
+        gitignore = project.root / ".claude" / ".gitignore"
+        existing = gitignore.read_text(encoding="utf-8") if gitignore.is_file() else ""
+        if path.name not in existing.splitlines():
+            head = existing.rstrip("\n") + "\n" if existing else "# personal Claude Code settings, never committed\n"
+            report.record(write_if_changed(gitignore, f"{head}{path.name}\n"),
+                          f"{_rel(project, gitignore)} (keeps {path.name} out of git)")
 
 
 # Settings whose old default a newer version replaced. Init upgrades a value
@@ -156,20 +212,12 @@ def init_project(root: Path, plugin_root: Path, name: str | None = None) -> Repo
     merged = merge_claude_md(existing, _template(plugin_root, "CLAUDE.md"), name)
     report.record(write_if_changed(project.claude_md, merged), "CLAUDE.md (foreman block)")
 
-    settings_rel = _rel(project, project.settings_path)
-    settings: dict | None = {}
-    if project.settings_path.is_file():
-        try:
-            settings = json.loads(project.settings_path.read_text(encoding="utf-8"))
-        except ValueError:
-            settings = None
-        if not isinstance(settings, dict):
-            settings = None
-            report.warnings.append(f"{settings_rel} is not a JSON object; left untouched")
+    settings = _read_settings(project, project.settings_path, report)
     if settings is not None:
         merged_settings = merge_settings(settings, _installed_plugin_keys())
         report.record(write_if_changed(project.settings_path, json.dumps(merged_settings, indent=2) + "\n"),
-                      settings_rel)
+                      _rel(project, project.settings_path))
+    _set_status_line(project, settings, report)
 
     for launcher, outcome in wrappers.ensure_launchers(project, plugin_root).items():
         report.record(outcome, f".claude/bin/{launcher}")
