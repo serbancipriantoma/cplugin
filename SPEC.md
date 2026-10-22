@@ -352,7 +352,7 @@ project/
     └── settings.json           # deny: TodoWrite, EnterPlanMode; playbook disabled here
 ```
 
-`init` is idempotent: run again, it updates the plugin's sections and leaves everything else alone. In `config.toml` it changes only settings that still hold a default an older version wrote and a newer one replaced (for example the worker's paths); values the user changed are never touched. If the project is not a git repository, it suggests `git init`.
+`init` is idempotent: run again, it updates the plugin's sections and leaves everything else alone. In `config.toml` it changes only settings that still hold a default an older version wrote and a newer one replaced (for example the worker's paths); values the user changed are never touched. If the project is not a git repository, it suggests `git init`. `/foreman:init` ends by showing the `tasks start` overview, because a session that started before the setup never shows the session-start banner.
 
 ## 11. Known limits and things to verify in the prototype
 

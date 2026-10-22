@@ -26,6 +26,17 @@ class InitTest(TempDirCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn(str(PLUGIN_ROOT), out.stdout)
 
+    def test_start_works_in_the_session_that_ran_init(self):
+        # /foreman:init ends with `tasks start`. That session began before the setup,
+        # so it carries no FOREMAN_SESSION_ID and no session of it is registered.
+        self.init_project()
+        result = self.run_tasks("start", session=None)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"worker  opus     {PLUGIN_ROOT}/agents/worker.md", result.stdout)
+        self.assertIn(f"tester  sonnet   {PLUGIN_ROOT}/agents/tester.md", result.stdout)
+        self.assertIn("Judges (panel, up to 8 min each)", result.stdout)
+        self.assertIn("no open tasks", result.stdout)
+
     def test_second_run_changes_nothing(self):
         self.init_project()
         before = {f: f.read_bytes() for f in self.project_dir.rglob("*") if f.is_file()}

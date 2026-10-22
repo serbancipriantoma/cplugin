@@ -59,6 +59,9 @@ Then, in the project you want to manage (once):
 /foreman:mindmap    build or refresh the project memory
 ```
 
+`/foreman:init` ends with the same overview as "start" (below), so you see the agents and judges
+right away, without restarting the session.
+
 After that there is nothing to start by hand: whenever Claude Code opens in the project, the
 memory and the active task load on their own, and a short banner shows the agents' models and
 which judge CLIs are installed. Say "start" (or `/foreman:start`) for the full picture: where

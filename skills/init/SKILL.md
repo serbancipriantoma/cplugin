@@ -23,12 +23,26 @@ Project name: $ARGUMENTS (when empty, the directory name is used)
 
 2. Summarize the report for the user: what was created, updated, left unchanged.
 
-3. If the report warns that this is not a git repository, explain why foreman needs
+3. Show what the project now uses. The session-start banner appears only when a
+   session starts in a foreman project, so a session that has just run the setup has
+   not shown it. Run this and show its output to the user exactly as printed, inside
+   a code block:
+
+   ```bash
+   python3 -I "${CLAUDE_PLUGIN_ROOT}/bin/tasks.py" start
+   ```
+
+   Under it, one line for each thing that needs attention, with how to fix it: a judge
+   marked ✗ not installed, judges without an OS sandbox, `tests.command` not set. Leave
+   `MIND_MAP.md` to step 5.
+
+4. If the report warns that this is not a git repository, explain why foreman needs
    git and ask the user whether to run `git init`. Do not run it without a yes.
    Explain any other WARNING line.
 
-4. If `MIND_MAP.md` was just created, it is still the empty template. Offer to build
+5. If `MIND_MAP.md` was just created, it is still the empty template. Offer to build
    it now with `/foreman:mindmap`.
 
-5. Tell the user the project memory loads automatically at the next session start,
-   after `/clear`, and after every compaction.
+6. Tell the user the project memory loads automatically at the next session start,
+   after `/clear`, and after every compaction, and that every session start shows a
+   short banner with the agents and judges (saying "start" shows the full list).
