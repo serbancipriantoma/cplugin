@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import VERSION, gates, judges, mindmap, status
+from . import VERSION, config, gates, judges, mindmap, status
 from .containment import Containment
 from .project import Project
 
@@ -61,6 +61,17 @@ def _memory(project: Project) -> str:
     over = " (over budget: compress it)" if len(text) > mindmap.MIND_MAP_BUDGET else ""
     return (f"MIND_MAP.md {len(text):,} / {mindmap.MIND_MAP_BUDGET:,} characters{over}, "
             f"{details} detail file(s) in {project.mindmap_dir.name}/")
+
+
+def _locker(project: Project, cfg: dict) -> str:
+    name = config.locker_dir(cfg)
+    if name is None:
+        return "locker.dir in .foreman/config.toml is not a usable folder name"
+    folder = project.root / name
+    if not (folder / ".gitignore").is_file():
+        return f"{name}/ is not set up: run /foreman:init"
+    files = sum(1 for p in folder.rglob("*") if p.is_file() and p.name != ".gitignore")
+    return f"{name}/ (not in git), {files} file(s): what passes between you and Claude"
 
 
 def _task_line(task: Task | None, freehand_since: float | None = None) -> str:
@@ -120,7 +131,7 @@ def report(project: Project, cfg: dict, plugin_root: Path, session_id: str | Non
         lines.append(f"  containment: {found.describe()}. Judges get only the tamper check, "
                      ".claude/bin/sandbox refuses to start")
 
-    lines += ["", "Memory", f"  {_memory(project)}", "", "Tasks"]
+    lines += ["", "Memory", f"  {_memory(project)}", "", "Locker", f"  {_locker(project, cfg)}", "", "Tasks"]
     active = status.active_task(project, session_id)
     if active is not None:
         lines.append(f"  active: {active.title}. {status.where(project, active)}")

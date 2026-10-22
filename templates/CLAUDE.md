@@ -37,6 +37,12 @@ This project uses the foreman workflow. When the user says "start", use the
   answer, a manual check), run `.claude/bin/tasks pause "<what you need>"` and ask.
 - **Freehand.** Only the user can suspend these rules, by typing `/foreman:freehand`; you
   cannot turn it on. It ends with `tasks work <N>` or `tasks freehand off`.
+- **The locker.** `{locker}/` holds what passes between you and the user, and git
+  never sees it: files the user hands you (images, mockups, PDFs) and what you hand
+  back (exports, reports). Nothing there is code, so it needs no task. A file that
+  has to ship, such as an image for a page, is copied (resized if needed) into the
+  project's own folder for it, which is committed; record in the task which locker
+  file it came from.
 - **Build or refresh the map** with `/foreman:mindmap`. Configuration lives in
   `.foreman/config.toml`.
 <!-- foreman:end -->

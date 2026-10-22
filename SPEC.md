@@ -156,7 +156,7 @@ The checking rule: a checked gate gets a short outcome on the same line, and the
 - Sub-agents **do not see the conversation**: they get only what MAIN puts in their prompt (the step, the criteria, the relevant files), plus `CLAUDE.md`.
 - The worker and the tester do not have the `Agent` tool (`disallowedTools` in their frontmatter), so they cannot start other agents.
 - Only MAIN checks gates. The worker and the tester return a report, and MAIN summarizes it in `task.md`.
-- Files that are not code (`.md`, `.json`, `.yaml`, images) are not restricted by role. "Code" is defined as in playbook: by extension, plus `bin/`, `scripts/` and files that start with a shebang. The list is configurable.
+- Files that are not code (`.md`, `.json`, `.yaml`, images) are not restricted by role. "Code" is defined as in playbook: by extension, plus `bin/`, `scripts/` and files that start with a shebang. The list is configurable. Nothing in the locker (section 10) is code.
 
 ### 4.2 How the roles are enforced
 
@@ -360,6 +360,7 @@ project/
 ├── CLAUDE.md                   # a short section: workflow + commands
 ├── MIND_MAP.md
 ├── mindmap/
+├── locker/                     # not in git: what the user hands Claude, and what Claude hands back
 ├── .foreman/
 │   ├── config.toml             # committed
 │   ├── roles/                  # optional: project-specific role rules
@@ -372,6 +373,16 @@ project/
 ```
 
 `init` is idempotent: run again, it updates the plugin's sections and leaves everything else alone. In `config.toml` it changes only settings that still hold a default an older version wrote and a newer one replaced (for example the worker's paths); values the user changed are never touched. If the project is not a git repository, it suggests `git init`. `/foreman:init` ends by showing the `tasks start` overview, because a session that started before the setup never shows the session-start banner.
+
+### The locker
+
+A folder git never sees, for files that pass between the user and Claude: the user drops in an image for the homepage, a mockup, a PDF with requirements; Claude leaves an export there (a PDF, a report). The name came from the user (2026-10-22): like a locker on a building site, it is personal, and what is left there is picked up later.
+
+- `init` creates `locker/` with a `.gitignore` of its own holding `*`, as `.claude/bin/` has, so the folder and everything in it stay out of git without touching the project's `.gitignore`. `[locker] dir` in `config.toml` names another folder: one name, no slashes, not starting with a dot.
+- A folder of that name that git already tracks files in, or one with a `.gitignore` of its own that is not foreman's, is left alone with a warning: it is the project's, not a locker.
+- Nothing in the locker is code: no task is needed to write there, and every role may. A judge can read it; it is in no diff and not in `git status`, so the tamper check and the Bash check never see it.
+- The CLAUDE.md block tells Claude what it is for. A file that has to ship (the image on the homepage) is copied, resized if needed, into the project's own folder for it, which is committed; the locker keeps the original. The task records which locker file it came from.
+- `tasks start` shows the locker and how many files it holds.
 
 ## 11. Known limits and things to verify in the prototype
 
@@ -413,4 +424,4 @@ Each milestone comes with tests and is usable on its own.
 5. ✅ **Judges** (2026-10-22). Codex and agy seats, read-only containment, the tamper check, panel and single modes, the `claude -p` fallback, reports and quoted summaries, judges on the board. 142 tests, with stand-in CLIs (a guard makes the real ones unreachable from tests); verified with the real CLIs: on a plan with a planted mistake (a CommonJS interface in an ES-module project), Codex and Antigravity both flagged it as high, with file:line evidence, and found two real gaps besides, in 39 seconds in parallel.
 6. ✅ **Freehand and sandbox** (2026-10-22). `/foreman:freehand` (user only) and `tasks freehand off`, the freehand log, `.claude/bin/sandbox`. 158 tests; verified with `claude -p`: the skill turned freehand on, and Claude Code ran inside the sandbox with home and `.git` writes denied.
 
-After the plan (2026-10-22): the plugin was renamed from `cplugin` to **foreman** (projects move from `.cplugin/` to `.foreman/` on the next `/foreman:init`); `max_parallel` is enforced; containment works on Linux through bubblewrap, pending a run on a Linux machine with `docs/linux.md`. Later the same day: `/foreman:init` ends with the `tasks start` overview, and the status line (section 7) replaced the user's bash script; 191 tests.
+After the plan (2026-10-22): the plugin was renamed from `cplugin` to **foreman** (projects move from `.cplugin/` to `.foreman/` on the next `/foreman:init`); `max_parallel` is enforced; containment works on Linux through bubblewrap, pending a run on a Linux machine with `docs/linux.md`. Later the same day: `/foreman:init` ends with the `tasks start` overview, the status line (section 7) replaced the user's bash script, and projects got a locker (section 10); 198 tests.

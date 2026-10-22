@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import gitutil, wrappers
+from . import config, gitutil, wrappers
 from .fsutil import write_atomic, write_if_changed
 from .project import LEGACY_STATE_DIR, STATE_DIR, Project
 
@@ -18,6 +18,10 @@ DENIED_TOOLS = ["TodoWrite", "EnterPlanMode"]
 CONFLICTING_PLUGINS = ("playbook",)
 # Set in the personal settings.local.json, unless the project already has a status line.
 STATUS_LINE = {"type": "command", "command": '"$CLAUDE_PROJECT_DIR"/.claude/bin/statusline', "padding": 0}
+# The locker's own .gitignore: the first line marks the folder as foreman's.
+LOCKER_MARKER = "# foreman's locker"
+LOCKER_GITIGNORE = (f"{LOCKER_MARKER}: what passes between you and Claude, never committed.\n"
+                    "# Delete this file and the folder is an ordinary one again.\n*\n")
 
 BLOCK_BEGIN = "<!-- foreman:begin"
 BLOCK_END = "<!-- foreman:end -->"
@@ -108,6 +112,26 @@ def _read_settings(project: Project, path: Path, report: Report) -> dict | None:
         report.warnings.append(f"{_rel(project, path)} is not a JSON object; left untouched")
         return None
     return settings
+
+
+def _ensure_locker(project: Project, name: str | None, report: Report) -> None:
+    """Make `name` the locker: a folder whose own .gitignore keeps all of it out
+    of git. A folder that is the project's (tracked, or with a .gitignore that is
+    not foreman's) is left alone."""
+    if name is None:
+        report.warnings.append("locker.dir in .foreman/config.toml is not a usable folder name; no locker set up")
+        return
+    folder = project.root / name
+    ignore = folder / ".gitignore"
+    label = f"{name}/ (the locker: not in git, for what passes between you and Claude)"
+    ours = ignore.is_file() and ignore.read_text(encoding="utf-8").startswith(LOCKER_MARKER)
+    tracked = (gitutil.git(project.root, "ls-files", "--", name) or b"").strip()
+    if not ours and ((folder.exists() and not folder.is_dir()) or ignore.exists() or tracked):
+        report.warnings.append(f"{name} is the project's own (tracked by git, or not a foreman locker), so it "
+                               f"was left alone; name another folder with [locker] dir in .foreman/config.toml")
+        return
+    folder.mkdir(exist_ok=True)
+    report.record(write_if_changed(ignore, LOCKER_GITIGNORE), label)
 
 
 def _set_status_line(project: Project, shared: dict | None, report: Report) -> None:
@@ -208,8 +232,12 @@ def init_project(root: Path, plugin_root: Path, name: str | None = None) -> Repo
             report.unchanged.remove(rel)
         report.record("updated", f"{rel} (old defaults upgraded: {', '.join(settings_changed)})")
 
+    locker = config.locker_dir(config.load_or_defaults(project, report.warnings))
+    _ensure_locker(project, locker, report)
+
     existing = project.claude_md.read_text(encoding="utf-8") if project.claude_md.is_file() else None
-    merged = merge_claude_md(existing, _template(plugin_root, "CLAUDE.md"), name)
+    block = _template(plugin_root, "CLAUDE.md").replace("{locker}", locker or config.DEFAULTS["locker"]["dir"])
+    merged = merge_claude_md(existing, block, name)
     report.record(write_if_changed(project.claude_md, merged), "CLAUDE.md (foreman block)")
 
     settings = _read_settings(project, project.settings_path, report)

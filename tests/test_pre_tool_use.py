@@ -37,6 +37,11 @@ class NoTaskTest(ProjectCase):
                     ".claude/settings.json", ".foreman/config.toml", "scripts/notes.md"):
             self.assertIsNone(self.write(rel), rel)
 
+    def test_the_locker_needs_no_task(self):
+        for rel in ("locker/homepage-export.html", "locker/drafts/sketch.tsx"):
+            self.assertIsNone(self.write(rel), rel)
+            self.assertIsNone(self.write(rel, agent_id="w1", agent_type="foreman:worker"), rel)
+
     def test_extensionless_script_with_shebang_is_code(self):
         script = self.project_dir / "deploy"
         script.write_text("#!/bin/sh\necho hi\n")

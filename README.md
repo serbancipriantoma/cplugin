@@ -20,6 +20,9 @@ A Claude Code plugin for task-gated, multi-agent work on a codebase:
   rate limit, the session's weighted tokens (sub-agents included) and its cost; below it, in a
   foreman project, the active task, its gate and the sub-agents working now. `/foreman:init`
   sets it in the project's `.claude/settings.local.json` unless the project already has one.
+- **A locker.** `locker/`, which git never sees, is where you hand Claude an image, a mockup
+  or a PDF, and where Claude leaves exports for you. What has to ship (the image on a page) is
+  copied into the project's own folders; the locker keeps the original.
 - **Judges from other providers.** `tasks plan-review` and `tasks impl-review` have Codex
   and Antigravity (or a read-only Claude when neither is installed) review the plan and
   the code. They never see the conversation, run read-only, and a tamper check voids any

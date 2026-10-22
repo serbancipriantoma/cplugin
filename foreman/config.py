@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import copy
+import re
 import shutil
 import tomllib
 
-from .project import Project
+from .project import MINDMAP_DIR, Project
+
+_LOCKER_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 
 DEFAULT_CODE_EXTENSIONS = [
     # web and mobile
@@ -36,6 +39,7 @@ DEFAULTS: dict = {
                                                 "**/*.spec.*"]},
     },
     "judges": {"mode": "panel", "timeout_min": 8, "fallback": "claude", "seat": []},
+    "locker": {"dir": "locker"},
 }
 
 MODEL_ALIASES = ("opus", "sonnet", "haiku", "fable")
@@ -83,6 +87,15 @@ def code_extensions(cfg: dict) -> set[str]:
     return {str(e).lower().lstrip(".") for e in exts}
 
 
+def locker_dir(cfg: dict) -> str | None:
+    """The locker's folder name, or None when [locker] dir is not a usable name:
+    one path segment, not hidden, not the mind map's folder."""
+    name = cfg.get("locker", {}).get("dir")
+    if not isinstance(name, str) or not _LOCKER_NAME_RE.match(name) or name == MINDMAP_DIR:
+        return None
+    return name
+
+
 def _is_str_list(value: object) -> bool:
     return isinstance(value, list) and all(isinstance(v, str) for v in value)
 
@@ -109,6 +122,9 @@ def check(cfg: dict) -> list[tuple[str, str]]:
     for key in ("code_extensions", "extra_code_extensions", "code_dirs"):
         if not _is_str_list(cfg.get("files", {}).get(key)):
             found.append(("ERROR", f"files.{key} must be a list of strings"))
+    if locker_dir(cfg) is None:
+        found.append(("ERROR", "locker.dir must be one folder name: letters, digits, _ . -, "
+                               "not starting with a dot, not mindmap"))
     command = str(cfg.get("tests", {}).get("command") or "").strip()
     if not command:
         found.append(("WARNING", "tests.command is empty: set the project's test command, e.g. \"npm test\""))

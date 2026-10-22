@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
 
-from .config import code_extensions
+from .config import code_extensions, locker_dir
 
 # Never code, even inside bin/ or scripts/.
 _DOC_EXTENSIONS = {"md", "txt", "json", "yaml", "yml", "toml", "csv", "png", "jpg", "jpeg",
@@ -14,6 +14,8 @@ _DOC_EXTENSIONS = {"md", "txt", "json", "yaml", "yml", "toml", "csv", "png", "jp
 def is_code_file(rel_path: str, abs_path: Path, cfg: dict) -> bool:
     """`rel_path` is relative to the project root, POSIX separators."""
     path = PurePosixPath(rel_path)
+    if path.parts and path.parts[0] == locker_dir(cfg):
+        return False  # the locker holds what passes between the user and Claude
     ext = path.suffix.lower().lstrip(".")
     if ext in code_extensions(cfg):
         return True

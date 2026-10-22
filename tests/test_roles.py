@@ -43,6 +43,26 @@ class RolesTest(unittest.TestCase):
         self.assertEqual(roles.owner("src/game.test.ts", nowhere, CFG), roles.TESTER)  # tests win
         self.assertEqual(roles.owner("src/__tests__/grid.tsx", nowhere, CFG), roles.TESTER)
 
+    def test_nothing_in_the_locker_is_code(self):
+        x = Path("/x")
+        for rel in ("locker/report.html", "locker/drafts/hero.tsx", "locker/notes.py"):
+            self.assertIsNone(roles.owner(rel, x, CFG), rel)
+            for role in (roles.MAIN, roles.WORKER, roles.TESTER, roles.OTHER):
+                self.assertIsNone(roles.write_violation(role, rel, x, CFG), (role, rel))
+        self.assertEqual(roles.owner("lockers/a.ts", x, CFG), roles.WORKER)  # only the folder itself
+        renamed = {**CFG, "locker": {"dir": "crate"}}
+        self.assertIsNone(roles.owner("crate/a.ts", x, renamed))
+        self.assertEqual(roles.owner("locker/a.ts", x, renamed), roles.WORKER)
+
+    def test_locker_dir_must_be_one_plain_folder_name(self):
+        for name in ("locker", "crate", "my_box-2", "box.v2"):
+            self.assertEqual(config.locker_dir({"locker": {"dir": name}}), name)
+        for name in ("", ".locker", "../up", "a/b", "mindmap", 3, None):
+            self.assertIsNone(config.locker_dir({"locker": {"dir": name}}), name)
+        self.assertIn(("ERROR", "locker.dir must be one folder name: letters, digits, _ . -, "
+                                "not starting with a dot, not mindmap"),
+                      config.check({**CFG, "locker": {"dir": "a/b"}}))
+
     def test_narrowed_worker_paths_leave_code_unassigned(self):
         cfg = {**CFG, "roles": {**CFG["roles"], "worker": {"paths": ["src/**"]}}}
         self.assertEqual(roles.owner("vite.config.ts", Path("/x"), cfg), roles.UNASSIGNED)

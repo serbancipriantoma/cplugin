@@ -49,5 +49,9 @@ model = ""
 [tests]
 command = ""            # e.g. "npm test" or "pytest -q"; empty = Claude finds it from the project
 
+[locker]
+# A folder git never sees: what you hand Claude (an image, a PDF) and what it hands back.
+dir = "locker"          # one folder name; /foreman:init creates it
+
 [review]
 debug_patterns = ["print(", "console.log(", "debugger", "breakpoint()"]

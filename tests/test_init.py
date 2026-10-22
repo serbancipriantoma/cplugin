@@ -15,7 +15,7 @@ class InitTest(TempDirCase):
                     ".foreman/sessions", "mindmap", "MIND_MAP.md", "CLAUDE.md",
                     ".claude/settings.json", ".claude/settings.local.json", ".claude/bin/tasks",
                     ".claude/bin/board", ".claude/bin/sandbox", ".claude/bin/statusline",
-                    ".claude/bin/.gitignore"):
+                    ".claude/bin/.gitignore", "locker/.gitignore"):
             self.assertTrue((p / rel).exists(), rel)
         self.assertIn("# MIND_MAP — Portfolio", (p / "MIND_MAP.md").read_text())
         self.assertTrue((p / "CLAUDE.md").read_text().startswith("# Portfolio\n"))
@@ -37,6 +37,8 @@ class InitTest(TempDirCase):
         self.assertIn(f"tester  sonnet   {PLUGIN_ROOT}/agents/tester.md", result.stdout)
         self.assertIn("Judges (panel, up to 8 min each)", result.stdout)
         self.assertIn("no open tasks", result.stdout)
+        (self.project_dir / "locker" / "hero.png").write_bytes(b"\x89PNG")
+        self.assertIn("Locker\n  locker/ (not in git), 1 file(s)", self.run_tasks("start", session=None).stdout)
 
     def test_second_run_changes_nothing(self):
         self.init_project()
@@ -134,6 +136,53 @@ class InitTest(TempDirCase):
         self.assertEqual(ignored.returncode, 0)
         again = self.run_tasks("init", session=None, extra_env=env)
         self.assertNotIn(".claude/.gitignore", again.stdout)
+
+    def git(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", "-C", str(self.project_dir), *args], capture_output=True, text=True,
+                              env=self.env(GIT_CONFIG_GLOBAL="/dev/null", XDG_CONFIG_HOME=str(self.tmp / "xdg")))
+
+    def test_locker_is_kept_out_of_git(self):
+        self.git("init", "-q")
+        result = self.run_tasks("init", session=None)
+        self.assertIn("created: locker/ (the locker: not in git", result.stdout)
+        (self.project_dir / "locker" / "hero.png").write_bytes(b"\x89PNG")
+        self.assertEqual(self.git("check-ignore", "-q", "locker/hero.png").returncode, 0)
+        self.assertNotIn("locker", self.git("status", "--porcelain", "--untracked-files=all").stdout)
+        self.assertIn("`locker/` holds what passes between you and the user",
+                      (self.project_dir / "CLAUDE.md").read_text())
+        self.assertIn("unchanged: locker/", self.run_tasks("init", session=None).stdout)
+
+    def test_locker_takes_the_configured_name(self):
+        self.init_project()
+        config_path = self.project_dir / ".foreman" / "config.toml"
+        config_path.write_text(config_path.read_text().replace('dir = "locker"', 'dir = "crate"'))
+        result = self.run_tasks("init", session=None)
+        self.assertIn("created: crate/ (the locker", result.stdout)
+        self.assertIn("`crate/` holds what passes", (self.project_dir / "CLAUDE.md").read_text())
+
+    def test_leaves_a_folder_the_project_owns(self):
+        self.git("init", "-q")
+        tracked = self.project_dir / "locker" / "notes.txt"
+        tracked.parent.mkdir()
+        tracked.write_text("ours")
+        self.git("add", "locker/notes.txt")
+        result = self.run_tasks("init", session=None)
+        self.assertIn("WARNING: locker is the project's own", result.stdout)
+        self.assertFalse((self.project_dir / "locker" / ".gitignore").exists())
+        mine = self.tmp / "other"
+        (mine / "locker").mkdir(parents=True)
+        (mine / "locker" / ".gitignore").write_text("*.tmp\n")
+        result = self.run_tasks("init", cwd=mine, session=None)
+        self.assertIn("WARNING: locker is the project's own", result.stdout)
+        self.assertEqual((mine / "locker" / ".gitignore").read_text(), "*.tmp\n")
+
+    def test_bad_locker_name_is_reported(self):
+        self.init_project()
+        config_path = self.project_dir / ".foreman" / "config.toml"
+        config_path.write_text(config_path.read_text().replace('dir = "locker"', 'dir = "../outside"'))
+        self.assertIn("WARNING: locker.dir in .foreman/config.toml is not a usable folder name",
+                      self.run_tasks("init", session=None).stdout)
+        self.assertFalse((self.tmp / "outside").exists())
 
 
 OLD_CONFIG = """[workflow]
