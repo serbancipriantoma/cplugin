@@ -378,7 +378,7 @@ project/
 
 ## 13. Open decisions
 
-1. ~~The plugin's final name~~ **Decided (2026-10-22): foreman.** The GitHub repository keeps its old name (`serbancipriantoma/cplugin`) until it is renamed.
+1. ~~The plugin's final name~~ **Decided (2026-10-22): foreman.** The GitHub repository was renamed from `serbancipriantoma/cplugin` to `serbancipriantoma/foreman` the same day.
 2. ~~Language~~ **Decided (2026-10-21): English** for templates, role prompts, hook messages, CLI output and all documentation, this specification included.
 3. **How many workers in parallel** by default. For now 1, configurable.
 4. **Git required?** For now yes: `init` warns when the project is not a git repository. Without git, the Bash check, the impl-review diff and the TAMPER check do not work.

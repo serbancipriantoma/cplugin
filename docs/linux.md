@@ -77,7 +77,7 @@ Please run these on the Linux machine and send back the output of each step.
 2. **The test suite.**
 
    ```bash
-   git clone https://github.com/serbancipriantoma/cplugin.git foreman
+   git clone https://github.com/serbancipriantoma/foreman.git
    cd foreman/tests && python3 -m unittest -v 2>&1 | tail -40
    ```
 

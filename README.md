@@ -42,7 +42,7 @@ judges' containment: see [docs/linux.md](docs/linux.md).
 ## Install
 
 ```bash
-claude plugin marketplace add serbancipriantoma/cplugin
+claude plugin marketplace add serbancipriantoma/foreman
 claude plugin install foreman@foreman-marketplace
 ```
 
